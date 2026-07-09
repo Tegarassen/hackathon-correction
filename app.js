@@ -192,7 +192,7 @@ async function loadSharedData(options = {}) {
     console.error("Supabase load failed", error);
     state.syncStatus = "error";
     saveLocal();
-    showToast("Could not load Supabase data. Using local copy.");
+    showToast(error.message ? `Supabase load failed: ${error.message}` : "Could not load Supabase data. Using local copy.");
   }
 }
 
@@ -511,7 +511,7 @@ document.addEventListener("submit", async event => {
       console.error("Save failed", error);
       state.syncStatus = "error";
       save();
-      showToast("Saved locally, but Supabase sync failed.");
+      showToast(error.message ? `Supabase sync failed: ${error.message}` : "Saved locally, but Supabase sync failed.");
     }
 
     if (data.destination === "dashboard" || qid === state.data.questions.length) mentorDashboard();
