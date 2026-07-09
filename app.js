@@ -4,7 +4,7 @@ const supabaseClient = !cfg.demoMode && cfg.supabaseUrl && cfg.supabaseAnonKey &
   ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey)
   : null;
 
-const mentors = ["Chevish", "Mehreen", "Pratish", "Vinasha", "Diraj", "Ayush", "Ijaaz", "Kevan", "Keshav", "Tega", "Ashutosh", "Semarchy"];
+const defaultMentors = ["Chevish", "Mehreen", "Pratish", "Vinasha", "Diraj", "Ayush", "Ijaaz", "Kevan", "Keshav", "Tega", "Ashutosh", "Semarchy"];
 const seed = {
   groups: [
     { id: 1, name: "Group 1", participants: ["Sollinselvan Curpen", "Luvraj Kaundun", "Uzaïrah Bibi Mohung", "Jeevesh Kaleeah", "Lailie Tia Chakowa"] },
@@ -13,14 +13,30 @@ const seed = {
     { id: 4, name: "Group 4", participants: ["Tejasweenee Doya", "Krishi Narrayen", "Adarsh Nareshsing Bahadoor", "Nilesh Kumar Sahadew", "Vashistha Ittoo", "Medhini Darshee Foolell"] },
     { id: 5, name: "Group 5", participants: ["Ojaswita Nund", "Akash Boodram", "Dushantsingh Ramdass", "Khooshboo Ramdewar", "Muhammad Umair Parthasee", "Vedrajsing Jankee"] }
   ],
-  reviewers: mentors,
-  questions: Array.from({ length: 20 }, (_, i) => ({ id: i + 1, title: `Question ${i + 1}`, prompt: "Question text can be configured by the administrator." }))
+  reviewers: defaultMentors,
+  questions: [
+    { id: 1, title: "Question 1 — Sums", prompt: "Sums", maxMarks: 2 },
+    { id: 2, title: "Question 2 — GCD", prompt: "GCD", maxMarks: 3 },
+    { id: 3, title: "Question 3 — Decryption", prompt: "Decryption", maxMarks: 7 },
+    { id: 4, title: "Question 4 — Sophie Germain", prompt: "Sophie Germain", maxMarks: 8 },
+    { id: 5, title: "Question 5 — Anonymous", prompt: "Anonymous", maxMarks: 6 },
+    { id: 6, title: "Question 6 — Calculatrice", prompt: "Calculatrice", maxMarks: 9 },
+    { id: 7, title: "Question 7 — Nouvelle langue", prompt: "Nouvelle langue", maxMarks: 6 },
+    { id: 8, title: "Question 8 — JSON", prompt: "JSON", maxMarks: 4 },
+    { id: 9, title: "Question 9 — Message", prompt: "Message", maxMarks: 7 },
+    { id: 10, title: "Question 10 — SQL Challenge", prompt: "SQL Challenge", maxMarks: 10 },
+    { id: 11, title: "Question 11 — Smart Snake Game", prompt: "Smart Snake Game", maxMarks: 10 },
+    { id: 12, title: "Question 12 — Book Aggregator", prompt: "Book Aggregator", maxMarks: 8 },
+    { id: 13, title: "Question 13 — Leet Speak", prompt: "Leet Speak", maxMarks: 3 },
+    ...Array.from({ length: 7 }, (_, i) => ({ id: i + 14, title: `Question ${i + 14}`, prompt: "Marks pending — configure when available.", maxMarks: null }))
+  ]
 };
 
 let state = JSON.parse(localStorage.getItem("spoon-state-v2") || "null") || {};
 state = {
   session: state.session || null,
   activeMentor: state.activeMentor || "Chevish",
+  mentors: state.mentors || defaultMentors,
   groupCorrections: state.groupCorrections || {},
   individualRemarks: state.individualRemarks || {},
   reports: state.reports || {},
@@ -28,6 +44,9 @@ state = {
   syncStatus: "loading",
   data: seed
 };
+
+if (!state.mentors?.length) state.mentors = defaultMentors;
+if (!state.mentors.includes(state.activeMentor)) state.activeMentor = state.mentors[0] || "Mentor";
 
 let lastAdminMentor = "all";
 let refreshTimer = null;
@@ -38,6 +57,22 @@ const esc = (value = "") => String(value).replace(/[&<>'"]/g, c => ({ "&": "&amp
 const groupById = id => state.data.groups.find(group => group.id === Number(id));
 const remoteEnabled = () => Boolean(supabaseClient);
 const adminAuthEnabled = () => remoteEnabled() && !cfg.demoMode;
+const knownTotalMarks = () => state.data.questions.reduce((sum, q) => sum + (Number(q.maxMarks) || 0), 0);
+const markStatus = (mark, max) => {
+  const value = Number(mark);
+  const total = Number(max);
+  if (!Number.isFinite(value)) return null;
+  if (value <= 0) return "incorrect";
+  if (Number.isFinite(total) && total > 0 && value >= total) return "correct";
+  return "partial";
+};
+const groupScore = group => state.data.questions.reduce((sum, question) => {
+  const correction = state.groupCorrections[correctionKey(group.id, question.id)];
+  return sum + (Number(correction?.marksAwarded) || 0);
+}, 0);
+const scoreboard = () => state.data.groups
+  .map(group => ({ group, score: groupScore(group), max: knownTotalMarks() }))
+  .sort((a, b) => b.score - a.score);
 
 function correctionKey(groupId, qid) {
   return `${groupId}|${qid}`;
@@ -60,6 +95,8 @@ function applyGroupCorrectionRow(row) {
   state.groupCorrections[correctionKey(row.group_id, row.question_position)] = {
     status: row.status,
     workState: row.work_state || (row.status ? "completed" : "in_progress"),
+    marksAwarded: row.marks_awarded,
+    maxMarks: row.max_marks,
     correction: row.correction || "",
     groupRemark: row.group_remark || "",
     mentorName: row.mentor_name || "",
@@ -99,6 +136,52 @@ function applyReportRow(row) {
 function removeReportRow(row) {
   if (!row) return;
   delete state.reports[row.report_key];
+}
+
+function applyMentorRows(rows = []) {
+  const activeMentors = rows
+    .filter(row => row.active !== false)
+    .map(row => row.name)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+
+  if (activeMentors.length) state.mentors = activeMentors;
+  if (!state.mentors.includes(state.activeMentor)) state.activeMentor = state.mentors[0] || "Mentor";
+  if (state.session?.role === "mentor") state.session.name = state.activeMentor;
+}
+
+async function addMentorAsAdmin(name) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can add mentors.");
+  const cleanName = name.trim().replace(/\s+/g, " ");
+  if (!cleanName) throw new Error("Enter a mentor name.");
+  if (state.mentors.some(mentor => mentor.toLowerCase() === cleanName.toLowerCase())) throw new Error("This mentor already exists.");
+
+  state.mentors = [...state.mentors, cleanName].sort((a, b) => a.localeCompare(b));
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const { error } = await supabaseClient
+    .from("mentors")
+    .upsert({ name: cleanName, active: true }, { onConflict: "name" });
+  if (error) throw error;
+}
+
+async function deleteMentorAsAdmin(name) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can delete mentors.");
+  if (state.mentors.length <= 1) throw new Error("Keep at least one mentor.");
+
+  state.mentors = state.mentors.filter(mentor => mentor !== name);
+  if (state.activeMentor === name) state.activeMentor = state.mentors[0] || "Mentor";
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const { error } = await supabaseClient
+    .from("mentors")
+    .delete()
+    .eq("name", name);
+  if (error) throw error;
 }
 
 async function verifyAdminSession() {
@@ -165,7 +248,8 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [corrections, remarks, reports, history] = await Promise.all([
+    const [mentorsResult, corrections, remarks, reports, history] = await Promise.all([
+      supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       supabaseClient.from("group_corrections").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("individual_remarks").select("*").order("updated_at", { ascending: false }),
       includeAdminData ? supabaseClient.from("ai_reports").select("*").order("generated_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
@@ -175,6 +259,8 @@ async function loadSharedData(options = {}) {
     for (const result of [corrections, remarks, reports, history]) {
       if (result.error) throw result.error;
     }
+    if (!mentorsResult.error) applyMentorRows(mentorsResult.data);
+    else console.warn("Could not load mentors table; using local mentor list.", mentorsResult.error);
 
     state.groupCorrections = {};
     state.individualRemarks = {};
@@ -229,6 +315,13 @@ function subscribeSharedData() {
       else applyReportRow(payload.new);
       scheduleRefresh();
     })
+    .on("postgres_changes", { event: "*", schema: "public", table: "mentors" }, async () => {
+      const { data, error } = await supabaseClient.from("mentors").select("*").order("name", { ascending: true });
+      if (!error) {
+        applyMentorRows(data);
+        scheduleRefresh();
+      }
+    })
     .subscribe(status => {
       if (status === "SUBSCRIBED") {
         state.syncStatus = "online";
@@ -242,6 +335,9 @@ async function persistReview(group, qid, formData) {
 
   state.syncStatus = "saving";
   scheduleRefresh();
+  const question = state.data.questions.find(item => item.id === Number(qid));
+  const marksAwarded = formData.marksAwarded === "" ? null : Number(formData.marksAwarded);
+  const maxMarks = question?.maxMarks ?? null;
 
   const correctionPayload = {
     group_id: group.id,
@@ -249,7 +345,9 @@ async function persistReview(group, qid, formData) {
     question_position: qid,
     mentor_name: state.activeMentor,
     work_state: "completed",
-    status: formData.status,
+    status: markStatus(marksAwarded, maxMarks),
+    marks_awarded: marksAwarded,
+    max_marks: maxMarks,
     correction: formData.correction || "",
     group_remark: formData.groupRemark || ""
   };
@@ -316,6 +414,8 @@ async function markQuestionInProgress(group, qid) {
       mentor_name: state.activeMentor,
       work_state: "in_progress",
       status: null,
+      marks_awarded: null,
+      max_marks: state.data.questions.find(item => item.id === Number(qid))?.maxMarks ?? null,
       correction: existing?.correction || "",
       group_remark: existing?.groupRemark || ""
     }, { onConflict: "group_id,question_position" });
@@ -402,6 +502,21 @@ async function deleteCorrectionAsAdmin(groupId, qid) {
   if (error) throw error;
 }
 
+async function clearRecentChangesAsAdmin() {
+  if (state.session?.role !== "admin") throw new Error("Only admin can clear recent changes.");
+  state.changeHistory = [];
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const { error } = await supabaseClient
+    .from("change_history")
+    .delete()
+    .neq("id", 0);
+
+  if (error) throw error;
+}
+
 function shell(content) {
   const { name, role } = state.session;
   const accountControls = role === "admin"
@@ -415,7 +530,7 @@ function loginView(message = "") {
 }
 
 function mentorTabs() {
-  return `<div class="mentor-tabs" aria-label="Mentor workspaces">${mentors.map(name => `<button class="mentor-tab ${state.activeMentor === name ? "active" : ""}" data-mentor="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
+  return `<div class="mentor-tabs" aria-label="Mentor workspaces">${state.mentors.map(name => `<button class="mentor-tab ${state.activeMentor === name ? "active" : ""}" data-mentor="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
 }
 
 function groupState(group) {
@@ -435,12 +550,14 @@ function correctionView(groupId, qid = 1) {
   const group = groupById(groupId);
   const q = state.data.questions.find(item => item.id === Number(qid));
   const correction = state.groupCorrections[correctionKey(group.id, q.id)] || {};
+  const markValue = correction.marksAwarded ?? "";
+  const maxCopy = q.maxMarks ? ` / ${q.maxMarks} marks` : " marks";
   const ownerCopy = correction.status
     ? `Completed by ${correction.mentorName || "a mentor"}`
     : correction.workState === "in_progress"
       ? `In progress by ${correction.mentorName || "a mentor"}`
       : "Not started yet";
-  shell(`<main class="page guided-review"><nav class="journey" aria-label="Review steps"><span class="done">✓ <b>Mentor</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Question ${q.id}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="dashboard">← Change group</button><div class="question-progress"><span>Question ${q.id} of ${state.data.questions.length}</span><div><i style="width:${q.id / state.data.questions.length * 100}%"></i></div></div><span class="autosave-note">${esc(ownerCopy)}</span></div><details class="question-jump"><summary>Jump to another question</summary><div class="question-nav">${state.data.questions.map(item => { const itemCorrection = state.groupCorrections[correctionKey(group.id, item.id)] || {}; return `<button class="qdot ${itemCorrection.status ? "done" : itemCorrection.workState === "in_progress" ? "started" : ""} ${item.id === q.id ? "active" : ""}" title="${esc(itemCorrection.status ? `Completed by ${itemCorrection.mentorName || "mentor"}` : itemCorrection.workState === "in_progress" ? `In progress by ${itemCorrection.mentorName || "mentor"}` : "Not started")}" data-group-q="${group.id}" data-q="${item.id}">${item.id}</button>`; }).join("")}</div></details><section class="workflow"><form id="group-review-form" data-group="${group.id}" data-q="${q.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Shared correction</p><h1>${esc(q.title)}</h1><p class="subtle">${esc(q.prompt)}</p><div class="section-label"><span>1</span><div><strong>How did the group do?</strong><small>One shared correction per question. You can edit what another mentor started.</small></div></div><div class="status-row">${["correct", "partial", "incorrect"].map(status => `<button type="button" class="status ${correction.status === status ? "selected" : ""}" data-status="${status}">${status === "partial" ? "Partly correct" : status[0].toUpperCase() + status.slice(1)}</button>`).join("")}</div><input type="hidden" name="status" value="${correction.status || ""}"><label>Correction or model answer <small class="optional">Optional</small><textarea name="correction" placeholder="What is the correct answer or approach?">${esc(correction.correction)}</textarea></label><label>Group observation <small class="optional">Optional</small><textarea name="groupRemark" placeholder="What did the group do well, or what should they improve?">${esc(correction.groupRemark)}</textarea></label></article><article class="card individual-card"><div class="section-label"><span>2</span><div><strong>Any personal remarks?</strong><small>Optional — shared per participant/question, visible in admin only</small></div></div><div class="remark-list">${group.participants.map(person => { const entry = state.individualRemarks[remarkKey(group.id, person, q.id)] || {}; const remark = typeof entry === "string" ? entry : entry.remark || ""; return `<label>${esc(person)}<textarea class="compact" name="remark::${esc(person)}" placeholder="Short, constructive note for admin…">${esc(remark)}</textarea></label>`; }).join("")}</div></article><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & leave</button><button class="primary" type="submit" name="destination" value="next">${q.id === state.data.questions.length ? "Finish group ✓" : "Save & continue →"}</button></div></form></section></main>`);
+  shell(`<main class="page guided-review"><nav class="journey" aria-label="Review steps"><span class="done">✓ <b>Mentor</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Question ${q.id}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="dashboard">← Change group</button><div class="question-progress"><span>Question ${q.id} of ${state.data.questions.length}</span><div><i style="width:${q.id / state.data.questions.length * 100}%"></i></div></div><span class="autosave-note">${esc(ownerCopy)}</span></div><details class="question-jump"><summary>Jump to another question</summary><div class="question-nav">${state.data.questions.map(item => { const itemCorrection = state.groupCorrections[correctionKey(group.id, item.id)] || {}; return `<button class="qdot ${itemCorrection.status ? "done" : itemCorrection.workState === "in_progress" ? "started" : ""} ${item.id === q.id ? "active" : ""}" title="${esc(itemCorrection.status ? `${itemCorrection.marksAwarded ?? 0}/${itemCorrection.maxMarks ?? "?"} marks by ${itemCorrection.mentorName || "mentor"}` : itemCorrection.workState === "in_progress" ? `In progress by ${itemCorrection.mentorName || "mentor"}` : "Not started")}" data-group-q="${group.id}" data-q="${item.id}">${item.id}</button>`; }).join("")}</div></details><section class="workflow"><form id="group-review-form" data-group="${group.id}" data-q="${q.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Shared marking</p><h1>${esc(q.title)}</h1><p class="subtle">${esc(q.prompt)}${q.maxMarks ? ` · Worth ${q.maxMarks} marks` : " · Marks pending"}</p><div class="section-label"><span>1</span><div><strong>Give the group mark</strong><small>One shared mark per question. You can edit what another mentor started.</small></div></div><label>Mark awarded <small class="optional">${esc(maxCopy)}</small><input name="marksAwarded" type="number" min="0" ${q.maxMarks ? `max="${q.maxMarks}" step="0.5"` : `step="0.5"`} value="${esc(markValue)}" placeholder="0${q.maxMarks ? ` to ${q.maxMarks}` : ""}" required></label><label>Correction or model answer <small class="optional">Optional</small><textarea name="correction" placeholder="What is the correct answer or approach?">${esc(correction.correction)}</textarea></label><label>Group observation <small class="optional">Optional</small><textarea name="groupRemark" placeholder="What did the group do well, or what should they improve?">${esc(correction.groupRemark)}</textarea></label></article><article class="card individual-card"><div class="section-label"><span>2</span><div><strong>Any personal remarks?</strong><small>Optional — shared per participant/question, visible in admin only</small></div></div><div class="remark-list">${group.participants.map(person => { const entry = state.individualRemarks[remarkKey(group.id, person, q.id)] || {}; const remark = typeof entry === "string" ? entry : entry.remark || ""; return `<label>${esc(person)}<textarea class="compact" name="remark::${esc(person)}" placeholder="Short, constructive note for admin…">${esc(remark)}</textarea></label>`; }).join("")}</div></article><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & leave</button><button class="primary" type="submit" name="destination" value="next">${q.id === state.data.questions.length ? "Finish group ✓" : "Save & continue →"}</button></div></form></section></main>`);
 }
 
 function showToast(message) {
@@ -455,9 +572,10 @@ function showToast(message) {
 function buildGroupSummary(group) {
   const entries = Object.entries(state.groupCorrections).filter(([key]) => key.split("|")[0] === String(group.id)).map(([key, value]) => ({ question: key.split("|")[1], ...value }));
   if (!entries.length) return "No mentor corrections have been submitted yet.";
-  const counts = entries.reduce((acc, item) => ((acc[item.status] = (acc[item.status] || 0) + 1), acc), {});
+  const score = groupScore(group);
+  const max = knownTotalMarks();
   const observations = entries.map(item => item.groupRemark).filter(Boolean);
-  return `${entries.length} shared question corrections assembled: ${counts.correct || 0} correct, ${counts.partial || 0} partial and ${counts.incorrect || 0} incorrect. ${observations.length ? `Key observations: ${observations.slice(0, 3).join(" · ")}` : "Add group observations to enrich the admin summary."}`;
+  return `${entries.length} shared question marks assembled. Current score: ${score}/${max} known marks. ${observations.length ? `Key observations: ${observations.slice(0, 3).join(" · ")}` : "Add group observations to enrich the admin summary."}`;
 }
 
 function buildQuestionSummary(group, question) {
@@ -466,12 +584,17 @@ function buildQuestionSummary(group, question) {
     return `Q${question.id}: not completed yet${correction?.mentorName ? ` — in progress by ${correction.mentorName}` : ""}.`;
   }
 
-  const statusCopy = correction.status === "partial" ? "partly correct" : correction.status;
-  const pieces = [`Q${question.id}: ${statusCopy}`];
+  const pieces = [`Q${question.id}: ${correction.marksAwarded ?? 0}/${correction.maxMarks ?? question.maxMarks ?? "?"} marks`];
   if (correction.correction) pieces.push(`Correction: ${correction.correction}`);
   if (correction.groupRemark) pieces.push(`Group note: ${correction.groupRemark}`);
   if (correction.mentorName) pieces.push(`Last edited by ${correction.mentorName}`);
   return pieces.join(" · ");
+}
+
+function scoreboardView() {
+  const rows = scoreboard();
+  const leader = rows[0];
+  return `<article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${knownTotalMarks()} known marks</span></div><div class="scoreboard-list">${rows.map((row, index) => `<div class="${index === 0 && row.score > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><meter min="0" max="${row.max || 1}" value="${row.score}"></meter><b>${row.score}/${row.max}</b></div>`).join("")}</div></article>`;
 }
 
 function buildPersonFeedback(person) {
@@ -491,7 +614,7 @@ function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Assembled feedback</h1></div><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></section><section class="stats"><div class="stat"><strong>${mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Shared question corrections</span></div><div class="stat"><strong>${totalRemarks}</strong><span>Individual remarks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><span class="ai-badge">${esc(syncLabel())}</span></div>${historyList()}</article>${state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">✦ AI assembled</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile"><strong>${esc(person)}</strong><p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("")}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks()}</strong><span>Known total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Mentor management</p><h2>Spoon mentors</h2></div><span class="ai-badge">${state.mentors.length} active</span></div><form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div></article><article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><div class="subtle-actions"><span class="ai-badge">${esc(syncLabel())}</span>${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div></div>${historyList()}</article>${state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">${groupScore(group)}/${knownTotalMarks()} marks</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile"><strong>${esc(person)}</strong><p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("")}</section></main>`);
 }
 
 function openPublicForm() {
@@ -520,17 +643,33 @@ document.addEventListener("submit", async event => {
     }
   }
 
+  if (event.target.id === "mentor-form") {
+    const data = Object.fromEntries(new FormData(event.target));
+    try {
+      await addMentorAsAdmin(data.mentorName || "");
+      showToast("✓ Mentor added");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(error.message || "Could not add mentor.");
+    }
+  }
+
   if (event.target.id === "group-review-form") {
     const submitter = event.submitter;
     const data = Object.fromEntries(new FormData(event.target));
     data.destination = submitter?.value || data.destination || "next";
-    if (!data.status) return alert("Choose the group assessment first.");
 
     const group = groupById(event.target.dataset.group);
     const qid = Number(event.target.dataset.q);
+    const question = state.data.questions.find(item => item.id === qid);
+    const marksAwarded = Number(data.marksAwarded);
+    if (!Number.isFinite(marksAwarded) || marksAwarded < 0) return alert("Enter a valid mark.");
+    if (question?.maxMarks && marksAwarded > question.maxMarks) return alert(`Maximum for this question is ${question.maxMarks} marks.`);
     state.groupCorrections[correctionKey(group.id, qid)] = {
-      status: data.status,
+      status: markStatus(marksAwarded, question?.maxMarks),
       workState: "completed",
+      marksAwarded,
+      maxMarks: question?.maxMarks ?? null,
       correction: data.correction,
       groupRemark: data.groupRemark,
       mentorName: state.activeMentor,
@@ -590,11 +729,6 @@ document.addEventListener("click", async event => {
     await markQuestionInProgress(group, qid);
     correctionView(group.id, qid);
   }
-  if (button.dataset.status) {
-    document.querySelectorAll(".status").forEach(item => item.classList.remove("selected"));
-    button.classList.add("selected");
-    document.querySelector('input[name="status"]').value = button.dataset.status;
-  }
   if (button.dataset.deleteCorrection) {
     const [groupId, qid] = button.dataset.deleteCorrection.split("|").map(Number);
     const ok = confirm(`Remove the correction and individual remarks for Group ${groupId}, Question ${qid}?`);
@@ -607,6 +741,32 @@ document.addEventListener("click", async event => {
     } catch (error) {
       console.error("Delete correction failed", error);
       showToast(error.message ? `Remove failed: ${error.message}` : "Could not remove correction.");
+    }
+  }
+  if (button.dataset.deleteMentor) {
+    const name = button.dataset.deleteMentor;
+    const ok = confirm(`Delete ${name} from the active mentor list? Existing corrections will keep their attribution.`);
+    if (!ok) return;
+
+    try {
+      await deleteMentorAsAdmin(name);
+      showToast("✓ Mentor deleted");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(error.message || "Could not delete mentor.");
+    }
+  }
+  if (button.dataset.action === "clear-history") {
+    const ok = confirm("Clear the recent mentor changes list? This does not delete corrections or remarks.");
+    if (!ok) return;
+
+    try {
+      await clearRecentChangesAsAdmin();
+      showToast("✓ Recent changes cleared");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      console.error("Clear history failed", error);
+      showToast(error.message ? `Clear failed: ${error.message}` : "Could not clear recent changes.");
     }
   }
   if (button.dataset.action === "generate-reports") {

@@ -22,6 +22,8 @@ create table if not exists public.group_corrections (
   mentor_name text not null,
   work_state public.correction_work_state not null default 'in_progress',
   status public.review_status,
+  marks_awarded numeric,
+  max_marks numeric,
   correction text not null default '',
   group_remark text not null default '',
   created_at timestamptz not null default now(),
@@ -68,12 +70,41 @@ create table if not exists public.change_history (
   changed_at timestamptz not null default now()
 );
 
+create table if not exists public.mentors (
+  name text primary key,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+insert into public.mentors (name, active)
+values
+  ('Chevish', true),
+  ('Mehreen', true),
+  ('Pratish', true),
+  ('Vinasha', true),
+  ('Diraj', true),
+  ('Ayush', true),
+  ('Ijaaz', true),
+  ('Kevan', true),
+  ('Keshav', true),
+  ('Tega', true),
+  ('Ashutosh', true),
+  ('Semarchy', true)
+on conflict (name) do update
+set active = true;
+
 -- Migration helpers for projects that previously used one correction per mentor.
 alter table public.group_corrections
   add column if not exists work_state public.correction_work_state not null default 'in_progress';
 
 alter table public.group_corrections
   alter column status drop not null;
+
+alter table public.group_corrections
+  add column if not exists marks_awarded numeric;
+
+alter table public.group_corrections
+  add column if not exists max_marks numeric;
 
 do $$
 begin
@@ -274,12 +305,15 @@ alter table public.individual_remarks enable row level security;
 alter table public.ai_reports enable row level security;
 alter table public.change_history enable row level security;
 alter table public.admin_users enable row level security;
+alter table public.mentors enable row level security;
 
 grant usage on schema public to anon, authenticated;
+grant select on public.mentors to anon, authenticated;
+grant insert, update, delete on public.mentors to authenticated;
 grant select, insert, update, delete on public.group_corrections to anon, authenticated;
 grant select, insert, update, delete on public.individual_remarks to anon, authenticated;
 grant select, insert, update, delete on public.ai_reports to authenticated;
-grant select on public.change_history to authenticated;
+grant select, delete on public.change_history to authenticated;
 grant select on public.admin_users to authenticated;
 
 drop policy if exists "admins can read admin users" on public.admin_users;
@@ -287,6 +321,19 @@ create policy "admins can read admin users"
 on public.admin_users for select
 to authenticated
 using (public.is_admin());
+
+drop policy if exists "public read mentors" on public.mentors;
+create policy "public read mentors"
+on public.mentors for select
+to anon, authenticated
+using (active = true);
+
+drop policy if exists "admin manage mentors" on public.mentors;
+create policy "admin manage mentors"
+on public.mentors for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
 
 drop policy if exists "public read group corrections" on public.group_corrections;
 create policy "public read group corrections"
@@ -298,14 +345,14 @@ drop policy if exists "public insert group corrections" on public.group_correcti
 create policy "public insert group corrections"
 on public.group_corrections for insert
 to anon, authenticated
-with check (mentor_name in ('Chevish','Mehreen','Pratish','Vinasha','Diraj','Ayush','Ijaaz','Kevan','Keshav','Tega','Ashutosh','Semarchy'));
+with check (exists (select 1 from public.mentors where mentors.name = mentor_name and mentors.active = true));
 
 drop policy if exists "public update group corrections" on public.group_corrections;
 create policy "public update group corrections"
 on public.group_corrections for update
 to anon, authenticated
 using (true)
-with check (mentor_name in ('Chevish','Mehreen','Pratish','Vinasha','Diraj','Ayush','Ijaaz','Kevan','Keshav','Tega','Ashutosh','Semarchy'));
+with check (exists (select 1 from public.mentors where mentors.name = mentor_name and mentors.active = true));
 
 drop policy if exists "public delete group corrections" on public.group_corrections;
 drop policy if exists "admin delete group corrections" on public.group_corrections;
@@ -324,14 +371,14 @@ drop policy if exists "public insert individual remarks" on public.individual_re
 create policy "public insert individual remarks"
 on public.individual_remarks for insert
 to anon, authenticated
-with check (mentor_name in ('Chevish','Mehreen','Pratish','Vinasha','Diraj','Ayush','Ijaaz','Kevan','Keshav','Tega','Ashutosh','Semarchy'));
+with check (exists (select 1 from public.mentors where mentors.name = mentor_name and mentors.active = true));
 
 drop policy if exists "public update individual remarks" on public.individual_remarks;
 create policy "public update individual remarks"
 on public.individual_remarks for update
 to anon, authenticated
 using (true)
-with check (mentor_name in ('Chevish','Mehreen','Pratish','Vinasha','Diraj','Ayush','Ijaaz','Kevan','Keshav','Tega','Ashutosh','Semarchy'));
+with check (exists (select 1 from public.mentors where mentors.name = mentor_name and mentors.active = true));
 
 drop policy if exists "public delete individual remarks" on public.individual_remarks;
 create policy "public delete individual remarks"
@@ -361,6 +408,12 @@ on public.change_history for select
 to authenticated
 using (public.is_admin());
 
+drop policy if exists "admin delete change history" on public.change_history;
+create policy "admin delete change history"
+on public.change_history for delete
+to authenticated
+using (public.is_admin());
+
 -- Realtime: if this table is already in the publication, Supabase may raise a
 -- duplicate_object error. These blocks keep the schema safe to re-run.
 do $$
@@ -378,5 +431,11 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.ai_reports;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.mentors;
 exception when duplicate_object then null;
 end $$;
