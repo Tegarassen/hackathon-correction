@@ -208,6 +208,18 @@ summary { cursor:pointer; font-weight:600; color:#087c79; }
 .status.selected { background:linear-gradient(135deg,#087fbd,#12b9ac); border-color: transparent; color: white; }
 .review-actions { display: flex; justify-content: space-between; margin-top: 18px; }
 .secondary { border: 1px solid #c6d1d6; background: #f1f4f5; border-radius: 10px; padding: 10px 15px; }
+.hidden { display:none !important; }
+.answer-toggle { margin:14px 0 0; border:1px solid rgba(255,134,66,.42); background:#fff4ec; color:#a94613; border-radius:999px; padding:8px 12px; font-size:12px; font-weight:800; box-shadow:0 6px 16px rgba(255,134,66,.10); }
+.answer-toggle:hover { background:#ffe7d8; transform:translateY(-1px); }
+.answer-panel { margin-top:12px; display:grid; gap:12px; padding:15px; border:1px solid #ffd0b6; border-radius:13px; background:linear-gradient(135deg,#fff8f3,#eefaf9); color:#26364b; }
+.answer-panel p { margin:6px 0 0; color:#506078; line-height:1.6; }
+.answer-panel ul { margin:7px 0 0; padding-left:19px; color:#506078; line-height:1.65; }
+.answer-panel strong { color:#12223a; }
+.answer-code-stack { display:grid; gap:10px; }
+.answer-code { margin:8px 0 0; border:1px solid rgba(18,33,58,.14); border-radius:12px; overflow:hidden; background:#111d35; }
+.answer-code figcaption { padding:8px 11px; color:#d9f7f3; background:rgba(255,255,255,.06); font-size:12px; font-weight:800; }
+.answer-code pre { margin:0; padding:13px; overflow:auto; max-height:360px; color:#eff8ff; font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace; white-space:pre; }
+.answer-code code { font:inherit; }
 .notice { border-left: 4px solid var(--green); padding: 12px 16px; background: #e8f8f6; border-radius: 8px; margin-bottom: 18px; }
 .toast { position:fixed; right:22px; bottom:22px; z-index:100; padding:12px 17px; border-radius:11px; background:var(--ink); color:white; box-shadow:0 14px 35px rgba(21,33,55,.25); animation:toast-in .2s ease-out; }
 @keyframes toast-in { from { transform:translateY(8px); opacity:0; } }
