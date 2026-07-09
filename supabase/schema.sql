@@ -1,6 +1,6 @@
 -- Spoon Hackathon Review Hub
 -- Run this file in Supabase SQL Editor before using the GitHub Pages app.
--- Mentors use a public link, so their selected mentor name is used for attribution.
+-- Spoon mentors use the internal mentor form link, so their selected mentor name is used for attribution.
 
 create extension if not exists pgcrypto;
 
@@ -8,6 +8,9 @@ do $$
 begin
   if not exists (select 1 from pg_type where typname = 'review_status') then
     create type public.review_status as enum ('correct', 'partial', 'incorrect');
+  end if;
+  if not exists (select 1 from pg_type where typname = 'correction_work_state') then
+    create type public.correction_work_state as enum ('in_progress', 'completed');
   end if;
 end $$;
 
@@ -17,12 +20,13 @@ create table if not exists public.group_corrections (
   group_name text not null,
   question_position integer not null check (question_position > 0),
   mentor_name text not null,
-  status public.review_status not null,
+  work_state public.correction_work_state not null default 'in_progress',
+  status public.review_status,
   correction text not null default '',
   group_remark text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (group_id, question_position, mentor_name)
+  unique (group_id, question_position)
 );
 
 create table if not exists public.individual_remarks (
@@ -35,13 +39,13 @@ create table if not exists public.individual_remarks (
   remark text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (group_id, participant_name, question_position, mentor_name)
+  unique (group_id, participant_name, question_position)
 );
 
 create table if not exists public.ai_reports (
   id uuid primary key default gen_random_uuid(),
   report_key text not null unique,
-  report_type text not null check (report_type in ('group', 'person')),
+  report_type text not null check (report_type in ('group', 'question', 'person')),
   group_id integer,
   group_name text,
   participant_name text,
@@ -63,6 +67,91 @@ create table if not exists public.change_history (
   new_data jsonb,
   changed_at timestamptz not null default now()
 );
+
+-- Migration helpers for projects that previously used one correction per mentor.
+alter table public.group_corrections
+  add column if not exists work_state public.correction_work_state not null default 'in_progress';
+
+alter table public.group_corrections
+  alter column status drop not null;
+
+do $$
+begin
+  delete from public.group_corrections
+  where ctid in (
+    select ctid
+    from (
+      select ctid, row_number() over (
+        partition by group_id, question_position
+        order by updated_at desc, created_at desc
+      ) as rn
+      from public.group_corrections
+    ) ranked
+    where rn > 1
+  );
+
+  alter table public.group_corrections
+    drop constraint if exists group_corrections_group_id_question_position_mentor_name_key;
+  alter table public.group_corrections
+    add constraint group_corrections_group_id_question_position_key unique (group_id, question_position);
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  delete from public.individual_remarks
+  where ctid in (
+    select ctid
+    from (
+      select ctid, row_number() over (
+        partition by group_id, participant_name, question_position
+        order by updated_at desc, created_at desc
+      ) as rn
+      from public.individual_remarks
+    ) ranked
+    where rn > 1
+  );
+
+  alter table public.individual_remarks
+    drop constraint if exists individual_remarks_group_id_participant_name_question_position_mentor_name_key;
+  alter table public.individual_remarks
+    add constraint individual_remarks_group_id_participant_name_question_position_key unique (group_id, participant_name, question_position);
+exception when duplicate_object then null;
+end $$;
+
+alter table public.ai_reports
+  drop constraint if exists ai_reports_report_type_check;
+
+alter table public.ai_reports
+  add constraint ai_reports_report_type_check
+  check (report_type in ('group', 'question', 'person'));
+
+create table if not exists public.admin_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text not null unique,
+  created_at timestamptz not null default now()
+);
+
+insert into public.admin_users (user_id, email)
+select id, email
+from auth.users
+where lower(email) = 'tega@spoon.hackathon'
+on conflict (user_id) do update
+set email = excluded.email;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.admin_users
+    where user_id = auth.uid()
+  );
+$$;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -168,6 +257,13 @@ alter table public.group_corrections enable row level security;
 alter table public.individual_remarks enable row level security;
 alter table public.ai_reports enable row level security;
 alter table public.change_history enable row level security;
+alter table public.admin_users enable row level security;
+
+drop policy if exists "admins can read admin users" on public.admin_users;
+create policy "admins can read admin users"
+on public.admin_users for select
+to authenticated
+using (public.is_admin());
 
 drop policy if exists "public read group corrections" on public.group_corrections;
 create policy "public read group corrections"
@@ -220,23 +316,26 @@ to anon, authenticated
 using (true);
 
 drop policy if exists "public read ai reports" on public.ai_reports;
-create policy "public read ai reports"
+drop policy if exists "admin read ai reports" on public.ai_reports;
+create policy "admin read ai reports"
 on public.ai_reports for select
-to anon, authenticated
-using (true);
+to authenticated
+using (public.is_admin());
 
 drop policy if exists "public upsert ai reports" on public.ai_reports;
-create policy "public upsert ai reports"
+drop policy if exists "admin upsert ai reports" on public.ai_reports;
+create policy "admin upsert ai reports"
 on public.ai_reports for all
-to anon, authenticated
-using (true)
-with check (true);
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
 
 drop policy if exists "public read change history" on public.change_history;
-create policy "public read change history"
+drop policy if exists "admin read change history" on public.change_history;
+create policy "admin read change history"
 on public.change_history for select
-to anon, authenticated
-using (true);
+to authenticated
+using (public.is_admin());
 
 -- Realtime: if this table is already in the publication, Supabase may raise a
 -- duplicate_object error. These blocks keep the schema safe to re-run.
