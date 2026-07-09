@@ -362,6 +362,46 @@ async function persistReports() {
   if (error) throw error;
 }
 
+async function deleteCorrectionAsAdmin(groupId, qid) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can remove corrections.");
+
+  const key = correctionKey(groupId, qid);
+  delete state.groupCorrections[key];
+  Object.keys(state.individualRemarks).forEach(remarkId => {
+    const [remarkGroupId, , remarkQid] = remarkId.split("|");
+    if (remarkGroupId === String(groupId) && remarkQid === String(qid)) delete state.individualRemarks[remarkId];
+  });
+  delete state.reports[`question|${groupId}|${qid}`];
+  delete state.reports[`group|${groupId}`];
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const [correctionResult, remarkResult, questionReportResult, groupReportResult] = await Promise.all([
+    supabaseClient
+      .from("group_corrections")
+      .delete()
+      .eq("group_id", groupId)
+      .eq("question_position", qid),
+    supabaseClient
+      .from("individual_remarks")
+      .delete()
+      .eq("group_id", groupId)
+      .eq("question_position", qid),
+    supabaseClient
+      .from("ai_reports")
+      .delete()
+      .eq("report_key", `question|${groupId}|${qid}`),
+    supabaseClient
+      .from("ai_reports")
+      .delete()
+      .eq("report_key", `group|${groupId}`)
+  ]);
+
+  const error = [correctionResult, remarkResult, questionReportResult, groupReportResult].find(result => result.error)?.error;
+  if (error) throw error;
+}
+
 function shell(content) {
   const { name, role } = state.session;
   const accountControls = role === "admin"
@@ -451,7 +491,7 @@ function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Assembled feedback</h1></div><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></section><section class="stats"><div class="stat"><strong>${mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Shared question corrections</span></div><div class="stat"><strong>${totalRemarks}</strong><span>Individual remarks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><span class="ai-badge">${esc(syncLabel())}</span></div>${historyList()}</article>${state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">✦ AI assembled</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p></div>`).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile"><strong>${esc(person)}</strong><p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("")}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Assembled feedback</h1></div><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></section><section class="stats"><div class="stat"><strong>${mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Shared question corrections</span></div><div class="stat"><strong>${totalRemarks}</strong><span>Individual remarks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><span class="ai-badge">${esc(syncLabel())}</span></div>${historyList()}</article>${state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">✦ AI assembled</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile"><strong>${esc(person)}</strong><p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("")}</section></main>`);
 }
 
 function openPublicForm() {
@@ -554,6 +594,20 @@ document.addEventListener("click", async event => {
     document.querySelectorAll(".status").forEach(item => item.classList.remove("selected"));
     button.classList.add("selected");
     document.querySelector('input[name="status"]').value = button.dataset.status;
+  }
+  if (button.dataset.deleteCorrection) {
+    const [groupId, qid] = button.dataset.deleteCorrection.split("|").map(Number);
+    const ok = confirm(`Remove the correction and individual remarks for Group ${groupId}, Question ${qid}?`);
+    if (!ok) return;
+
+    try {
+      await deleteCorrectionAsAdmin(groupId, qid);
+      showToast("✓ Correction removed");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      console.error("Delete correction failed", error);
+      showToast(error.message ? `Remove failed: ${error.message}` : "Could not remove correction.");
+    }
   }
   if (button.dataset.action === "generate-reports") {
     state.data.groups.forEach(group => {

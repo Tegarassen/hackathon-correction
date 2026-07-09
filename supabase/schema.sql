@@ -92,9 +92,17 @@ begin
 
   alter table public.group_corrections
     drop constraint if exists group_corrections_group_id_question_position_mentor_name_key;
-  alter table public.group_corrections
-    add constraint group_corrections_group_id_question_position_key unique (group_id, question_position);
-exception when duplicate_object then null;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'group_corrections_group_id_question_position_key'
+      and conrelid = 'public.group_corrections'::regclass
+  ) then
+    alter table public.group_corrections
+      add constraint group_corrections_group_id_question_position_key unique (group_id, question_position);
+  end if;
+exception when duplicate_object or duplicate_table then null;
 end $$;
 
 do $$
@@ -114,9 +122,17 @@ begin
 
   alter table public.individual_remarks
     drop constraint if exists individual_remarks_group_id_participant_name_question_position_mentor_name_key;
-  alter table public.individual_remarks
-    add constraint individual_remarks_group_id_participant_name_question_position_key unique (group_id, participant_name, question_position);
-exception when duplicate_object then null;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'individual_remarks_group_id_participant_name_question_position_key'
+      and conrelid = 'public.individual_remarks'::regclass
+  ) then
+    alter table public.individual_remarks
+      add constraint individual_remarks_group_id_participant_name_question_position_key unique (group_id, participant_name, question_position);
+  end if;
+exception when duplicate_object or duplicate_table then null;
 end $$;
 
 alter table public.ai_reports
@@ -259,6 +275,13 @@ alter table public.ai_reports enable row level security;
 alter table public.change_history enable row level security;
 alter table public.admin_users enable row level security;
 
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.group_corrections to anon, authenticated;
+grant select, insert, update, delete on public.individual_remarks to anon, authenticated;
+grant select, insert, update, delete on public.ai_reports to authenticated;
+grant select on public.change_history to authenticated;
+grant select on public.admin_users to authenticated;
+
 drop policy if exists "admins can read admin users" on public.admin_users;
 create policy "admins can read admin users"
 on public.admin_users for select
@@ -285,10 +308,11 @@ using (true)
 with check (mentor_name in ('Chevish','Mehreen','Pratish','Vinasha','Diraj','Ayush','Ijaaz','Kevan','Keshav','Tega','Ashutosh','Semarchy'));
 
 drop policy if exists "public delete group corrections" on public.group_corrections;
-create policy "public delete group corrections"
+drop policy if exists "admin delete group corrections" on public.group_corrections;
+create policy "admin delete group corrections"
 on public.group_corrections for delete
-to anon, authenticated
-using (true);
+to authenticated
+using (public.is_admin());
 
 drop policy if exists "public read individual remarks" on public.individual_remarks;
 create policy "public read individual remarks"
