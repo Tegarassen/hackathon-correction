@@ -74,6 +74,467 @@ const scoreboard = () => state.data.groups
   .map(group => ({ group, score: groupScore(group), max: knownTotalMarks() }))
   .sort((a, b) => b.score - a.score);
 
+const answerGuides = {
+  1: {
+    question: "Find the sum of all natural numbers below 1000 that are multiples of 3 or 5.",
+    answer: "233168",
+    details: ["Sum all natural numbers below 1000 that are divisible by 3 or 5."],
+    tests: ["Below 10 → 23", "Below 1000 → 233168", "Below 1250 → 363543"]
+  },
+  2: {
+    question: "Calculate the greatest common divisor for a list of numbers.",
+    answer: "Return the greatest common divisor for the full list, using absolute values.",
+    details: ["Handle negative values, empty lists, and a list made only of zeroes."],
+    tests: ["8, 40, 100, 120, 150 → 2", "8, 40, -100, -20 → 4", "2, 3, 5, 11 → 1", "[] → error / invalid input", "0, 0, 0 → error / invalid input"]
+  },
+  3: {
+    question: "Decrypt the message found in the bottle: Tyr&eif&*Jgf@fe&20&cr@ F0 9F AB B3.",
+    answer: "Chanro spoon 20 la 🫳",
+    details: ["Caesar cipher. Key can be read as -17 or +9.", "Encrypted text: Tyr&eif&*Jgf@fe&20&cr@ F0 9F AB B3"],
+    tests: ["Mentor should verify the decrypted readable phrase and the hand emoji byte sequence."]
+  },
+  4: {
+    question: "Create a JavaScript function that checks if N is a Sophie Germain prime with the extra twin-prime and prime-quadruplet properties.",
+    answer: "11 is the valid exceptional Sophie Germain prime for the provided tests.",
+    details: ["N and 2N + 1 must be prime.", "Either N - 2 or N + 2 is prime, but not both.", "N, N + 2, N + 6, and N + 8 must all be prime."],
+    tests: ["5 → not a balanced twin prime", "11 → exceptional Sophie Germain prime", "29 → not part of a prime quadruplet", "59 → not a Sophie Germain prime"]
+  },
+  5: {
+    question: "Build a program that takes a photo, video, and live webcam feed, then replaces detected faces with a mask.",
+    answer: "Program masks detected faces in image, video, and live webcam input.",
+    details: ["Libraries are allowed.", "External APIs are not allowed.", "Mentors should check that every detected face is covered by a chosen mask/image."],
+    tests: ["Upload a photo with multiple faces.", "Run a short video and confirm masks track faces across frames.", "Open webcam mode and confirm live face masking."]
+  },
+  6: {
+    question: "Write a calculator that receives a string such as “3 x 4” and returns the calculated result.",
+    answer: "A string calculator that parses expressions like “3 x 4” and returns the result.",
+    details: ["Supported operations: +, -, x, /.", "Any allowed language is acceptable if parsing and calculation are correct."],
+    tests: ["3 x 4 → 12", "10 / 2 → 5", "7 + 8 → 15", "9 - 14 → -5", "Invalid or incomplete expression should be handled cleanly."]
+  },
+  7: {
+    question: "Decode the unknown island language message written in Brainfuck.",
+    answer: "Pas blier amene gato pou nou kan hackathon fini.",
+    details: ["The provided language is Brainfuck.", "A valid solution may decode manually or use a Brainfuck interpreter."],
+    tests: ["Paste the encoded Brainfuck into an interpreter and compare the exact phrase."]
+  },
+  8: {
+    question: "Fetch product/order JSON data, list orders by product, calculate quantities, and filter orders by date range.",
+    answer: "Fetch and process the provided product/order JSON files.",
+    details: ["Products endpoint: https://keshav-public.s3.us-west-1.amazonaws.com/hackathon-json/product.json", "Orders endpoint: https://keshav-public.s3.us-west-1.amazonaws.com/hackathon-json/order.json", "Part 1: list orders for a product and calculate total quantity.", "Part 2: filter orders by start/end date and display price from the product file."],
+    tests: ["Search by product name case-insensitively.", "Use a valid date range and confirm only orders fully inside the range appear.", "Use a date range with no matches and show a clear empty result.", "Handle failed fetch/network errors cleanly."]
+  },
+  9: {
+    question: "Decrypt the second encoded message.",
+    answer: "my kraken is hungry",
+    details: ["This is the second encrypted message from the answer sheet."],
+    tests: ["Decoded message should match the phrase exactly."]
+  },
+  10: {
+    question: "Solve the SQL challenge cases using the employee, department, and project tables.",
+    answer: "SQL challenge with 19 practical cases.",
+    details: ["Expected skills include SELECT, subqueries, JOIN, GROUP BY, HAVING, ALTER/UPDATE, CASE, WITH/CTE, LEFT JOIN, LIKE, and DELETE.", "Important cases include IT employees, department salary totals, full_name column, same department as Jane Johnson, highest salary, project reports, salary bands, and Finance project deletion."],
+    tests: ["Each query should run without syntax errors.", "Aliases should be clear for report-style questions.", "Aggregations should group by department name.", "Deletion query should target only Finance department projects."]
+  },
+  11: {
+    question: "Build a smart Snake game with AI/autonomous movement.",
+    answer: "A working Smart Snake game with AI movement.",
+    details: ["Mentor should verify gameplay, canvas rendering, snake movement, food generation, collision/game-over behavior, score updates, and AI/autonomous movement."],
+    tests: ["Start game and confirm snake moves continuously.", "Food appears and score increases when eaten.", "Snake grows after eating.", "Wall/self collision ends or resets the game.", "AI movement avoids immediate obvious collisions where possible."]
+  },
+  12: {
+    question: "Aggregate book information from books.toscrape.com.",
+    answer: "Scrape http://books.toscrape.com/ and aggregate book information.",
+    details: ["Extract title, price, availability, and rating for book cards.", "BeautifulSoup/request-style implementation is acceptable."],
+    tests: ["First page returns a non-empty list of books.", "Each book object includes title, price, availability, and rating.", "Network/request errors are handled clearly."]
+  },
+  13: {
+    question: "Leet Speak challenge.",
+    answer: "Leet Speak guide pending.",
+    details: ["Use this helper once the official expected Leet Speak answer/scenarios are added."],
+    tests: ["Verify character replacement rules, casing, spaces, and punctuation once the final statement is confirmed."]
+  }
+};
+
+Object.assign(answerGuides[1], {
+  how: "Loop from 0 up to, but not including, the limit. Add the number when it is divisible by 3 or divisible by 5. Be careful not to double-count numbers like 15, because the condition should be OR, not two separate additions.",
+  checklist: ["Uses < limit, not <= limit.", "Checks both 3 and 5.", "Does not double count multiples of both 3 and 5.", "Returns a numeric sum, not a printed-only answer."],
+  codeSnippets: [{
+    title: "JavaScript reference",
+    code: [
+      "function sumMultiples(limit) {",
+      "  let total = 0;",
+      "  for (let i = 0; i < limit; i += 1) {",
+      "    if (i % 3 === 0 || i % 5 === 0) total += i;",
+      "  }",
+      "  return total;",
+      "}",
+      "",
+      "sumMultiples(1000); // 233168",
+      "sumMultiples(1250); // 363543"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[2], {
+  how: "Normalize the numbers with absolute values, reject invalid edge cases, then compute the greatest common divisor. A clean solution can use Euclid's algorithm pair by pair, or test divisors downward from the maximum absolute value.",
+  checklist: ["Rejects an empty input list.", "Handles negative values using absolute values.", "Handles zero values safely.", "Rejects a list containing only zeroes.", "Returns 1 for co-prime lists."],
+  codeSnippets: [{
+    title: "JavaScript Euclid reference",
+    code: [
+      "function gcdTwo(a, b) {",
+      "  a = Math.abs(a);",
+      "  b = Math.abs(b);",
+      "  while (b !== 0) {",
+      "    const next = a % b;",
+      "    a = b;",
+      "    b = next;",
+      "  }",
+      "  return a;",
+      "}",
+      "",
+      "function gcdList(values) {",
+      "  if (!Array.isArray(values) || values.length === 0) throw new Error('Empty list');",
+      "  if (values.every(value => value === 0)) throw new Error('Only zeroes');",
+      "  return values.map(Math.abs).reduce((acc, value) => gcdTwo(acc, value));",
+      "}",
+      "",
+      "gcdList([8, 40, 100, 120, 150]); // 2",
+      "gcdList([8, 40, -100, -20]); // 4"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[3], {
+  how: "The text is Caesar-shifted. A shift of -17 is equivalent to +9. Decode the readable part, then interpret the hexadecimal byte sequence F0 9F AB B3 as the Unicode hand emoji.",
+  checklist: ["Mentions Caesar cipher or equivalent rotation.", "Uses key -17 or +9.", "Keeps the number 20 in the final phrase.", "Converts the hex bytes into the emoji."],
+  codeSnippets: [{
+    title: "JavaScript Caesar helper",
+    code: [
+      "function caesar(text, shift) {",
+      "  return text.replace(/[a-z]/gi, char => {",
+      "    const base = char >= 'a' && char <= 'z' ? 97 : 65;",
+      "    const code = char.charCodeAt(0) - base;",
+      "    return String.fromCharCode(((code + shift + 26) % 26) + base);",
+      "  });",
+      "}",
+      "",
+      "caesar('Tyr&eif&*Jgf@fe&20&cr@', 9);",
+      "// Chan&nro&*Spo@on&20&la@",
+      "// Clean punctuation/spaces + F0 9F AB B3 => Chanro spoon 20 la 🫳"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[4], {
+  how: "The function needs three independent checks: Sophie Germain prime, balanced twin prime condition, and prime quadruplet condition. The submitted solution should explain which condition failed when a number is rejected.",
+  checklist: ["Has a correct primality test.", "Checks both N and 2N + 1.", "Uses XOR-style logic for N - 2 / N + 2.", "Checks N, N + 2, N + 6, N + 8 for the quadruplet.", "Produces the expected messages for 5, 11, 29, and 59."],
+  codeSnippets: [{
+    title: "JavaScript reference",
+    code: [
+      "const isPrime = number => {",
+      "  if (number <= 1) return false;",
+      "  if (number <= 3) return true;",
+      "  if (number % 2 === 0 || number % 3 === 0) return false;",
+      "  for (let i = 5; i * i <= number; i += 6) {",
+      "    if (number % i === 0 || number % (i + 2) === 0) return false;",
+      "  }",
+      "  return true;",
+      "};",
+      "",
+      "const isSophieGermain = n => isPrime(n) && isPrime(2 * n + 1);",
+      "const isBalancedTwin = n => isPrime(n) && (isPrime(n - 2) !== isPrime(n + 2));",
+      "const isQuadruplet = n => isPrime(n) && isPrime(n + 2) && isPrime(n + 6) && isPrime(n + 8);",
+      "",
+      "function checkExceptional(n) {",
+      "  if (!isSophieGermain(n)) return `${n} is not a Sophie Germain prime`;",
+      "  if (!isBalancedTwin(n)) return `${n} is not a balanced twin prime`;",
+      "  if (!isQuadruplet(n)) return `${n} is not part of a prime quadruplet`;",
+      "  return `${n} is an exceptional Sophie Germain prime with the desired properties`;",
+      "}"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[5], {
+  how: "A strong solution loads media, detects faces locally with a browser or computer-vision library, then draws a mask image over every detected face. Award stronger marks when all three modes work: photo, uploaded video, and webcam.",
+  checklist: ["No external face-detection API dependency.", "Works for multiple faces.", "Mask placement follows face bounding boxes.", "Video/webcam updates frame by frame.", "Has permission/error handling for camera access."],
+  codeSnippets: [{
+    title: "Browser approach outline",
+    code: [
+      "// Typical implementation shape:",
+      "// 1. Load local model/library, e.g. face-api.js or OpenCV.js.",
+      "// 2. Load image/video/webcam stream.",
+      "// 3. Detect face bounding boxes on every frame.",
+      "// 4. Draw original frame to canvas.",
+      "// 5. Draw the mask image over each face box.",
+      "",
+      "async function drawMasks(video, canvas, maskImage, detector) {",
+      "  const ctx = canvas.getContext('2d');",
+      "  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);",
+      "  const faces = await detector.detect(video);",
+      "  for (const face of faces) {",
+      "    ctx.drawImage(maskImage, face.x, face.y, face.width, face.height);",
+      "  }",
+      "  requestAnimationFrame(() => drawMasks(video, canvas, maskImage, detector));",
+      "}"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[6], {
+  how: "Parse exactly three parts from the input: left number, operator, right number. Convert numbers safely, execute the matching operation, and handle division by zero or malformed strings gracefully.",
+  checklist: ["Accepts spaces around the operator.", "Supports +, -, x, and /.", "Converts operands to numbers.", "Handles negative/decimal values if possible.", "Does not use unsafe eval unless strongly justified and restricted."],
+  codeSnippets: [{
+    title: "JavaScript reference",
+    code: [
+      "function calculate(expression) {",
+      "  const match = expression.trim().match(/^(-?\\d+(?:\\.\\d+)?)\\s*([+\\-x/])\\s*(-?\\d+(?:\\.\\d+)?)$/);",
+      "  if (!match) throw new Error('Invalid expression');",
+      "",
+      "  const left = Number(match[1]);",
+      "  const operator = match[2];",
+      "  const right = Number(match[3]);",
+      "",
+      "  if (operator === '+') return left + right;",
+      "  if (operator === '-') return left - right;",
+      "  if (operator === 'x') return left * right;",
+      "  if (operator === '/') {",
+      "    if (right === 0) throw new Error('Division by zero');",
+      "    return left / right;",
+      "  }",
+      "}",
+      "",
+      "calculate('3 x 4'); // 12"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[7], {
+  how: "The long sequence of symbols is Brainfuck. A correct submission can use an interpreter or implement a small interpreter. The important result is the decoded phrase, with spacing and meaning preserved.",
+  checklist: ["Recognizes Brainfuck.", "Can explain or demonstrate decoding.", "Returns the exact phrase.", "Does not confuse this with the second encrypted message."],
+  codeSnippets: [{
+    title: "Minimal Brainfuck interpreter idea",
+    code: [
+      "function runBrainfuck(program) {",
+      "  const tape = Array(30000).fill(0);",
+      "  let pointer = 0;",
+      "  let output = '';",
+      "  const loopStack = [];",
+      "  const loopMap = {};",
+      "",
+      "  [...program].forEach((char, index) => {",
+      "    if (char === '[') loopStack.push(index);",
+      "    if (char === ']') {",
+      "      const start = loopStack.pop();",
+      "      loopMap[start] = index;",
+      "      loopMap[index] = start;",
+      "    }",
+      "  });",
+      "",
+      "  for (let i = 0; i < program.length; i += 1) {",
+      "    const char = program[i];",
+      "    if (char === '>') pointer += 1;",
+      "    if (char === '<') pointer -= 1;",
+      "    if (char === '+') tape[pointer] = (tape[pointer] + 1) % 256;",
+      "    if (char === '-') tape[pointer] = (tape[pointer] + 255) % 256;",
+      "    if (char === '.') output += String.fromCharCode(tape[pointer]);",
+      "    if (char === '[' && tape[pointer] === 0) i = loopMap[i];",
+      "    if (char === ']' && tape[pointer] !== 0) i = loopMap[i];",
+      "  }",
+      "  return output;",
+      "}"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[8], {
+  how: "The solution should fetch two JSON files, combine the order data with product price data, and produce useful filtered output. Part 1 focuses on product quantity. Part 2 focuses on date-range filtering and joining prices.",
+  checklist: ["Fetches both endpoints.", "Handles failed HTTP requests.", "Product matching is case-insensitive.", "Date filtering uses YYYY-MM-DD parsing.", "Displays price by joining product data.", "Provides a clear message when no orders match."],
+  codeSnippets: [{
+    title: "Python reference structure",
+    code: [
+      "import requests",
+      "from datetime import datetime",
+      "",
+      "PRODUCTS_URL = 'https://keshav-public.s3.us-west-1.amazonaws.com/hackathon-json/product.json'",
+      "ORDERS_URL = 'https://keshav-public.s3.us-west-1.amazonaws.com/hackathon-json/order.json'",
+      "",
+      "def fetch_json(url):",
+      "    response = requests.get(url, timeout=10)",
+      "    response.raise_for_status()",
+      "    return response.json()",
+      "",
+      "def orders_for_product(orders, product_name):",
+      "    matches = [o for o in orders if o['product'].lower() == product_name.lower()]",
+      "    total_quantity = sum(int(o['quantity']) for o in matches)",
+      "    return matches, total_quantity",
+      "",
+      "def filter_by_date(orders, start, end):",
+      "    start_date = datetime.strptime(start, '%Y-%m-%d')",
+      "    end_date = datetime.strptime(end, '%Y-%m-%d')",
+      "    return [",
+      "        order for order in orders",
+      "        if start_date <= datetime.strptime(order['startDate'], '%Y-%m-%d')",
+      "        and datetime.strptime(order['endDate'], '%Y-%m-%d') <= end_date",
+      "    ]"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[9], {
+  how: "This is the second encrypted message from the attached answer sheet. Mentors should mark the final decoded message and any explanation of how the candidate decoded it.",
+  checklist: ["Final phrase is exact.", "Candidate shows a reproducible decode path or tool.", "No extra words are added to the answer."],
+  codeSnippets: [{
+    title: "Expected output",
+    code: "my kraken is hungry"
+  }]
+});
+
+Object.assign(answerGuides[10], {
+  how: "This question is about writing practical SQL queries across employees, departments, and projects. Mentors can award partial marks per case if the query intent is correct even with minor alias/style differences.",
+  checklist: ["Uses correct joins between employees/departments/projects.", "Uses GROUP BY for aggregates.", "Uses HAVING for aggregate filters.", "Uses subqueries where appropriate.", "ALTER/UPDATE full_name case is included.", "DELETE case only removes Finance projects."],
+  codeSnippets: [{
+    title: "Core SQL answer snippets",
+    code: [
+      "-- IT employees with salary",
+      "SELECT first_name, last_name, salary",
+      "FROM employees",
+      "WHERE department_id = (",
+      "  SELECT department_id FROM departments WHERE department_name = 'IT'",
+      ");",
+      "",
+      "-- Total salary by department",
+      "SELECT dep.department_name, SUM(emp.salary) AS total_salary",
+      "FROM employees emp",
+      "JOIN departments dep ON emp.department_id = dep.department_id",
+      "GROUP BY dep.department_name;",
+      "",
+      "-- Add and populate full_name",
+      "ALTER TABLE employees ADD full_name varchar(255);",
+      "UPDATE employees SET full_name = first_name || ' ' || last_name;",
+      "",
+      "-- Highest paid employee with department",
+      "SELECT emp.full_name, emp.salary, dep.department_name",
+      "FROM employees emp",
+      "JOIN departments dep ON emp.department_id = dep.department_id",
+      "WHERE emp.salary = (SELECT MAX(salary) FROM employees);",
+      "",
+      "-- Departments with average salary above 60000",
+      "SELECT dep.department_name, AVG(emp.salary) AS average_salary",
+      "FROM employees emp",
+      "JOIN departments dep ON emp.department_id = dep.department_id",
+      "GROUP BY dep.department_name",
+      "HAVING AVG(emp.salary) > 60000;",
+      "",
+      "-- Salary range classification",
+      "SELECT full_name, salary,",
+      "  CASE",
+      "    WHEN salary < 55000 THEN 'Low'",
+      "    WHEN salary BETWEEN 55000 AND 60000 THEN 'Medium'",
+      "    ELSE 'High'",
+      "  END AS salary_range",
+      "FROM employees;",
+      "",
+      "-- Delete Finance projects",
+      "DELETE FROM projects",
+      "WHERE department_id = (",
+      "  SELECT department_id FROM departments WHERE department_name = 'Finance'",
+      ");"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[11], {
+  how: "The expected result is a playable Snake game, ideally with an AI/autonomous movement strategy. Mentors should test it as software, not just inspect code: start it, watch movement, eat food, collide, and confirm score behavior.",
+  checklist: ["Canvas or visual grid renders correctly.", "Snake moves at a consistent interval.", "Arrow/manual controls or AI movement work.", "Food appears in valid empty cells.", "Eating food grows the snake and increases score.", "Collision with wall/self is handled.", "AI chooses a reasonable next direction rather than freezing."],
+  codeSnippets: [{
+    title: "Smart movement idea",
+    code: [
+      "function chooseDirection(snake, food, gridSize) {",
+      "  const head = snake[0];",
+      "  const options = [",
+      "    { dx: 1, dy: 0 },",
+      "    { dx: -1, dy: 0 },",
+      "    { dx: 0, dy: 1 },",
+      "    { dx: 0, dy: -1 }",
+      "  ];",
+      "",
+      "  const safeMoves = options.filter(move => {",
+      "    const next = { x: head.x + move.dx, y: head.y + move.dy };",
+      "    const hitsWall = next.x < 0 || next.y < 0 || next.x >= gridSize || next.y >= gridSize;",
+      "    const hitsSelf = snake.some(part => part.x === next.x && part.y === next.y);",
+      "    return !hitsWall && !hitsSelf;",
+      "  });",
+      "",
+      "  safeMoves.sort((a, b) => {",
+      "    const nextA = { x: head.x + a.dx, y: head.y + a.dy };",
+      "    const nextB = { x: head.x + b.dx, y: head.y + b.dy };",
+      "    const distA = Math.abs(nextA.x - food.x) + Math.abs(nextA.y - food.y);",
+      "    const distB = Math.abs(nextB.x - food.x) + Math.abs(nextB.y - food.y);",
+      "    return distA - distB;",
+      "  });",
+      "",
+      "  return safeMoves[0] || { dx: 0, dy: 0 };",
+      "}"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[12], {
+  how: "Scrape the book catalogue page and build a list of structured records. The important fields are title, price, availability, and rating. A stronger answer handles request failures and can extend to pagination.",
+  checklist: ["Requests the books.toscrape.com page.", "Parses HTML with BeautifulSoup or equivalent.", "Finds article.product_pod cards.", "Extracts title from h3/a title attribute.", "Extracts price, availability, and rating.", "Prints or returns structured data."],
+  codeSnippets: [{
+    title: "Python BeautifulSoup reference",
+    code: [
+      "import requests",
+      "from bs4 import BeautifulSoup",
+      "",
+      "url = 'http://books.toscrape.com/'",
+      "response = requests.get(url, timeout=10)",
+      "response.raise_for_status()",
+      "",
+      "soup = BeautifulSoup(response.content, 'html.parser')",
+      "books = []",
+      "",
+      "for book in soup.find_all('article', class_='product_pod'):",
+      "    title = book.h3.a['title']",
+      "    price = book.find('p', class_='price_color').text",
+      "    availability = book.find('p', class_='instock availability').text.strip()",
+      "    rating = book.p['class'][1]",
+      "    books.append({",
+      "        'title': title,",
+      "        'price': price,",
+      "        'availability': availability,",
+      "        'rating': rating",
+      "    })",
+      "",
+      "print(books)"
+    ].join("\n")
+  }]
+});
+
+Object.assign(answerGuides[13], {
+  how: "Leet Speak usually means replacing letters with visually similar numbers/symbols. Since the final official answer is not in the attached sheet, mentors should use the exact statement/rules given during the hackathon as the source of truth.",
+  checklist: ["Applies the expected replacement mapping consistently.", "Preserves spaces and punctuation unless instructed otherwise.", "Handles uppercase/lowercase consistently.", "Can decode back or encode forward based on the question wording."],
+  codeSnippets: [{
+    title: "Typical Leet Speak encoder pattern",
+    code: [
+      "const leetMap = {",
+      "  a: '4', e: '3', i: '1', o: '0', s: '5', t: '7'",
+      "};",
+      "",
+      "function toLeet(text) {",
+      "  return text.replace(/[aeiost]/gi, char => {",
+      "    const replacement = leetMap[char.toLowerCase()];",
+      "    return replacement || char;",
+      "  });",
+      "}",
+      "",
+      "toLeet('Spoon Hackathon'); // 5p00n H4ck47h0n"
+    ].join("\n")
+  }]
+});
+
 function correctionKey(groupId, qid) {
   return `${groupId}|${qid}`;
 }
@@ -533,6 +994,30 @@ function mentorTabs() {
   return `<div class="mentor-tabs" aria-label="Mentor workspaces">${state.mentors.map(name => `<button class="mentor-tab ${state.activeMentor === name ? "active" : ""}" data-mentor="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
 }
 
+function answerGuideView(question) {
+  const guide = answerGuides[question.id];
+  if (!guide) {
+    return `<div class="answer-panel hidden" data-answer-panel><p>No answer/test guide has been added for this question yet.</p></div>`;
+  }
+
+  const list = (title, items = []) => items.length
+    ? `<div><strong>${esc(title)}</strong><ul>${items.map(item => `<li>${esc(item)}</li>`).join("")}</ul></div>`
+    : "";
+  const snippets = (guide.codeSnippets || []).length
+    ? `<div class="answer-code-stack"><strong>Code snippet / reference</strong>${guide.codeSnippets.map(snippet => `<figure class="answer-code"><figcaption>${esc(snippet.title || "Reference")}</figcaption><pre><code>${esc(snippet.code)}</code></pre></figure>`).join("")}</div>`
+    : "";
+
+  return `<div class="answer-panel hidden" data-answer-panel>
+    <div><strong>Question reminder</strong><p>${esc(guide.question || question.prompt)}</p></div>
+    <div><strong>Expected answer</strong><p>${esc(guide.answer)}</p></div>
+    ${guide.how ? `<div><strong>Detailed approach</strong><p>${esc(guide.how)}</p></div>` : ""}
+    ${snippets}
+    ${list("Marking checklist", guide.checklist)}
+    ${list("What to verify", guide.details)}
+    ${list("Test scenarios", guide.tests)}
+  </div>`;
+}
+
 function groupState(group) {
   const completed = state.data.questions.filter(q => state.groupCorrections[correctionKey(group.id, q.id)]?.status).length;
   const started = state.data.questions.filter(q => state.groupCorrections[correctionKey(group.id, q.id)]?.workState === "in_progress").length;
@@ -557,7 +1042,7 @@ function correctionView(groupId, qid = 1) {
     : correction.workState === "in_progress"
       ? `In progress by ${correction.mentorName || "a mentor"}`
       : "Not started yet";
-  shell(`<main class="page guided-review"><nav class="journey" aria-label="Review steps"><span class="done">✓ <b>Mentor</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Question ${q.id}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="dashboard">← Change group</button><div class="question-progress"><span>Question ${q.id} of ${state.data.questions.length}</span><div><i style="width:${q.id / state.data.questions.length * 100}%"></i></div></div><span class="autosave-note">${esc(ownerCopy)}</span></div><details class="question-jump"><summary>Jump to another question</summary><div class="question-nav">${state.data.questions.map(item => { const itemCorrection = state.groupCorrections[correctionKey(group.id, item.id)] || {}; return `<button class="qdot ${itemCorrection.status ? "done" : itemCorrection.workState === "in_progress" ? "started" : ""} ${item.id === q.id ? "active" : ""}" title="${esc(itemCorrection.status ? `${itemCorrection.marksAwarded ?? 0}/${itemCorrection.maxMarks ?? "?"} marks by ${itemCorrection.mentorName || "mentor"}` : itemCorrection.workState === "in_progress" ? `In progress by ${itemCorrection.mentorName || "mentor"}` : "Not started")}" data-group-q="${group.id}" data-q="${item.id}">${item.id}</button>`; }).join("")}</div></details><section class="workflow"><form id="group-review-form" data-group="${group.id}" data-q="${q.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Shared marking</p><h1>${esc(q.title)}</h1><p class="subtle">${esc(q.prompt)}${q.maxMarks ? ` · Worth ${q.maxMarks} marks` : " · Marks pending"}</p><div class="section-label"><span>1</span><div><strong>Give the group mark</strong><small>One shared mark per question. You can edit what another mentor started.</small></div></div><label>Mark awarded <small class="optional">${esc(maxCopy)}</small><input name="marksAwarded" type="number" min="0" ${q.maxMarks ? `max="${q.maxMarks}" step="0.5"` : `step="0.5"`} value="${esc(markValue)}" placeholder="0${q.maxMarks ? ` to ${q.maxMarks}` : ""}" required></label><label>Correction or model answer <small class="optional">Optional</small><textarea name="correction" placeholder="What is the correct answer or approach?">${esc(correction.correction)}</textarea></label><label>Group observation <small class="optional">Optional</small><textarea name="groupRemark" placeholder="What did the group do well, or what should they improve?">${esc(correction.groupRemark)}</textarea></label></article><article class="card individual-card"><div class="section-label"><span>2</span><div><strong>Any personal remarks?</strong><small>Optional — shared per participant/question, visible in admin only</small></div></div><div class="remark-list">${group.participants.map(person => { const entry = state.individualRemarks[remarkKey(group.id, person, q.id)] || {}; const remark = typeof entry === "string" ? entry : entry.remark || ""; return `<label>${esc(person)}<textarea class="compact" name="remark::${esc(person)}" placeholder="Short, constructive note for admin…">${esc(remark)}</textarea></label>`; }).join("")}</div></article><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & leave</button><button class="primary" type="submit" name="destination" value="next">${q.id === state.data.questions.length ? "Finish group ✓" : "Save & continue →"}</button></div></form></section></main>`);
+  shell(`<main class="page guided-review"><nav class="journey" aria-label="Review steps"><span class="done">✓ <b>Mentor</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Question ${q.id}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="dashboard">← Change group</button><div class="question-progress"><span>Question ${q.id} of ${state.data.questions.length}</span><div><i style="width:${q.id / state.data.questions.length * 100}%"></i></div></div><span class="autosave-note">${esc(ownerCopy)}</span></div><details class="question-jump"><summary>Jump to another question</summary><div class="question-nav">${state.data.questions.map(item => { const itemCorrection = state.groupCorrections[correctionKey(group.id, item.id)] || {}; return `<button class="qdot ${itemCorrection.status ? "done" : itemCorrection.workState === "in_progress" ? "started" : ""} ${item.id === q.id ? "active" : ""}" title="${esc(itemCorrection.status ? `${itemCorrection.marksAwarded ?? 0}/${itemCorrection.maxMarks ?? "?"} marks by ${itemCorrection.mentorName || "mentor"}` : itemCorrection.workState === "in_progress" ? `In progress by ${itemCorrection.mentorName || "mentor"}` : "Not started")}" data-group-q="${group.id}" data-q="${item.id}">${item.id}</button>`; }).join("")}</div></details><section class="workflow"><form id="group-review-form" data-group="${group.id}" data-q="${q.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Shared marking</p><h1>${esc(q.title)}</h1><p class="subtle">${esc(q.prompt)}${q.maxMarks ? ` · Worth ${q.maxMarks} marks` : " · Marks pending"}</p><button class="answer-toggle" type="button" data-action="toggle-answer">💡 Answer / tests</button>${answerGuideView(q)}<div class="section-label"><span>1</span><div><strong>Give the group mark</strong><small>One shared mark per question. You can edit what another mentor started.</small></div></div><label>Mark awarded <small class="optional">${esc(maxCopy)}</small><input name="marksAwarded" type="number" min="0" ${q.maxMarks ? `max="${q.maxMarks}" step="0.5"` : `step="0.5"`} value="${esc(markValue)}" placeholder="0${q.maxMarks ? ` to ${q.maxMarks}` : ""}" required></label><label>Correction or model answer <small class="optional">Optional</small><textarea name="correction" placeholder="What is the correct answer or approach?">${esc(correction.correction)}</textarea></label><label>Group observation <small class="optional">Optional</small><textarea name="groupRemark" placeholder="What did the group do well, or what should they improve?">${esc(correction.groupRemark)}</textarea></label></article><article class="card individual-card"><div class="section-label"><span>2</span><div><strong>Any personal remarks?</strong><small>Optional — shared per participant/question, visible in admin only</small></div></div><div class="remark-list">${group.participants.map(person => { const entry = state.individualRemarks[remarkKey(group.id, person, q.id)] || {}; const remark = typeof entry === "string" ? entry : entry.remark || ""; return `<label>${esc(person)}<textarea class="compact" name="remark::${esc(person)}" placeholder="Short, constructive note for admin…">${esc(remark)}</textarea></label>`; }).join("")}</div></article><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & leave</button><button class="primary" type="submit" name="destination" value="next">${q.id === state.data.questions.length ? "Finish group ✓" : "Save & continue →"}</button></div></form></section></main>`);
 }
 
 function showToast(message) {
@@ -711,6 +1196,13 @@ document.addEventListener("click", async event => {
   }
   if (button.dataset.action === "public-form") openPublicForm();
   if (button.dataset.action === "dashboard") dashboard();
+  if (button.dataset.action === "toggle-answer") {
+    const panel = button.closest(".question-card")?.querySelector("[data-answer-panel]");
+    panel?.classList.toggle("hidden");
+    const isHidden = panel?.classList.contains("hidden");
+    button.textContent = isHidden ? "💡 Answer / tests" : "Hide answer / tests";
+    return;
+  }
   if (button.dataset.mentor) {
     state.activeMentor = button.dataset.mentor;
     state.session.name = state.activeMentor;
