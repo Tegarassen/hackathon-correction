@@ -166,6 +166,7 @@ textarea { min-height: 110px; resize: vertical; }
 .individual-card .section-label { margin-top:0; }
 textarea.compact { min-height:75px; }
 .ai-badge { flex:0 0 auto; padding:7px 10px; border-radius:99px; background:#e2f7f4; color:#087c79; font-size:12px; font-weight:600; }
+.sync-pill { background:rgba(18,170,163,.14); color:#dffdfa; border:1px solid rgba(255,255,255,.18); }
 .summary-text { font-size:15px; line-height:1.8; color:#506078; padding:16px; background:#f4fafb; border-radius:10px; border-left:3px solid var(--green); }
 .report-card h3 { margin:25px 0 12px; }
 .individual-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:11px; }
@@ -175,6 +176,7 @@ details { margin-top:18px; border-top:1px solid var(--line); padding-top:14px; }
 summary { cursor:pointer; font-weight:600; color:#087c79; }
 .mentor-inputs { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
 .mentor-inputs > div { display:grid; grid-template-columns:30px 1fr; align-items:center; gap:7px; padding:10px; background:#f5f9fa; border-radius:9px; }
+.history-list > div { align-items:start; }
 .mentor-inputs small { grid-column:2; color:var(--muted); }
 .avatar { grid-row:1/3; display:grid; place-items:center; width:30px; height:30px; border-radius:50%; color:white; background:var(--ink); }
 .question-nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin-top: 16px; }
