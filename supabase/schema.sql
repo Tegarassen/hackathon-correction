@@ -76,6 +76,20 @@ create table if not exists public.mentors (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.newbie_photos (
+  id uuid primary key default gen_random_uuid(),
+  participant_name text not null unique,
+  group_id integer,
+  group_name text,
+  object_path text not null unique,
+  uploaded_by uuid references auth.users(id) default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.newbie_photos
+  alter column uploaded_by set default auth.uid();
+
 insert into public.mentors (name, active)
 values
   ('Chevish', true),
@@ -220,6 +234,11 @@ create trigger individual_remarks_updated_at
 before update on public.individual_remarks
 for each row execute function public.set_updated_at();
 
+drop trigger if exists newbie_photos_updated_at on public.newbie_photos;
+create trigger newbie_photos_updated_at
+before update on public.newbie_photos
+for each row execute function public.set_updated_at();
+
 create or replace function public.log_group_correction_change()
 returns trigger
 language plpgsql
@@ -306,10 +325,27 @@ alter table public.ai_reports enable row level security;
 alter table public.change_history enable row level security;
 alter table public.admin_users enable row level security;
 alter table public.mentors enable row level security;
+alter table public.newbie_photos enable row level security;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'newbie-display',
+  'newbie-display',
+  false,
+  1048576,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update
+set
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 grant usage on schema public to anon, authenticated;
 grant select on public.mentors to anon, authenticated;
 grant insert, update, delete on public.mentors to authenticated;
+grant select on public.newbie_photos to anon, authenticated;
+grant insert, update, delete on public.newbie_photos to authenticated;
 grant select, insert, update, delete on public.group_corrections to anon, authenticated;
 grant select, insert, update, delete on public.individual_remarks to anon, authenticated;
 grant select, insert, update, delete on public.ai_reports to authenticated;
@@ -334,6 +370,58 @@ on public.mentors for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "public read newbie photos" on public.newbie_photos;
+create policy "public read newbie photos"
+on public.newbie_photos for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "admin manage newbie photos" on public.newbie_photos;
+create policy "admin manage newbie photos"
+on public.newbie_photos for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "anyone can view newbie display photos" on storage.objects;
+create policy "anyone can view newbie display photos"
+on storage.objects for select
+to anon, authenticated
+using (
+  bucket_id = 'newbie-display'
+);
+
+drop policy if exists "admins upload newbie display photos" on storage.objects;
+create policy "admins upload newbie display photos"
+on storage.objects for insert
+to authenticated
+with check (
+  bucket_id = 'newbie-display'
+  and public.is_admin()
+);
+
+drop policy if exists "admins update newbie display photos" on storage.objects;
+create policy "admins update newbie display photos"
+on storage.objects for update
+to authenticated
+using (
+  bucket_id = 'newbie-display'
+  and public.is_admin()
+)
+with check (
+  bucket_id = 'newbie-display'
+  and public.is_admin()
+);
+
+drop policy if exists "admins delete newbie display photos" on storage.objects;
+create policy "admins delete newbie display photos"
+on storage.objects for delete
+to authenticated
+using (
+  bucket_id = 'newbie-display'
+  and public.is_admin()
+);
 
 drop policy if exists "public read group corrections" on public.group_corrections;
 create policy "public read group corrections"
@@ -437,5 +525,11 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.mentors;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.newbie_photos;
 exception when duplicate_object then null;
 end $$;

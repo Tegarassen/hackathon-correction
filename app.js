@@ -39,6 +39,8 @@ state = {
   mentors: state.mentors || defaultMentors,
   groupCorrections: state.groupCorrections || {},
   individualRemarks: state.individualRemarks || {},
+  participantPhotos: state.participantPhotos || {},
+  photoUrls: state.photoUrls || {},
   reports: state.reports || {},
   changeHistory: state.changeHistory || [],
   syncStatus: "loading",
@@ -552,6 +554,123 @@ function remarkKey(groupId, person, qid) {
   return `${groupId}|${person}|${qid}`;
 }
 
+const allParticipants = () => state.data.groups.flatMap(group => group.participants.map(person => ({ group, person })));
+const normalizePhotoName = value => String(value || "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\.[^.]+$/g, "")
+  .replace(/[^a-z0-9]+/gi, "")
+  .toLowerCase();
+const initials = name => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
+const photoFor = person => state.photoUrls?.[person] || "";
+
+function participantAvatar(person, size = "small") {
+  const url = photoFor(person);
+  return url
+    ? `<img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false">`
+    : `<span class="participant-photo placeholder ${size}">${esc(initials(person))}</span>`;
+}
+
+function participantNameBlock(person) {
+  return `<span class="participant-name-block">${participantAvatar(person)}<span>${esc(person)}</span></span>`;
+}
+
+function matchParticipantFromFile(file) {
+  const fileKey = normalizePhotoName(file.name);
+  if (!fileKey) return null;
+  return allParticipants().find(({ person }) => {
+    const personKey = normalizePhotoName(person);
+    return fileKey === personKey || fileKey.includes(personKey) || personKey.includes(fileKey);
+  }) || null;
+}
+
+function applyPhotoRows(rows = []) {
+  state.participantPhotos = {};
+  rows.forEach(row => {
+    if (row?.participant_name && row?.object_path) {
+      state.participantPhotos[row.participant_name] = {
+        objectPath: row.object_path,
+        groupId: row.group_id,
+        updatedAt: row.updated_at || row.created_at
+      };
+    }
+  });
+}
+
+function applyPhotoRow(row) {
+  if (!row?.participant_name || !row?.object_path) return;
+  state.participantPhotos[row.participant_name] = {
+    objectPath: row.object_path,
+    groupId: row.group_id,
+    updatedAt: row.updated_at || row.created_at
+  };
+}
+
+function removePhotoRow(row) {
+  if (!row?.participant_name) return;
+  delete state.participantPhotos[row.participant_name];
+  delete state.photoUrls[row.participant_name];
+}
+
+async function hydratePhotoUrls() {
+  state.photoUrls = {};
+  if (!remoteEnabled()) return;
+
+  await Promise.all(Object.entries(state.participantPhotos || {}).map(async ([person, record]) => {
+    const { data, error } = await supabaseClient
+      .storage
+      .from("newbie-display")
+      .createSignedUrl(record.objectPath, 60 * 60);
+    if (!error && data?.signedUrl) state.photoUrls[person] = data.signedUrl;
+  }));
+}
+
+async function compressPhoto(file) {
+  const image = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+    image.src = objectUrl;
+  });
+
+  const maxSide = 900;
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+  canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(objectUrl);
+
+  return await new Promise(resolve => canvas.toBlob(resolve, "image/webp", 0.82));
+}
+
+async function uploadParticipantPhoto(file, match) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can upload photos.");
+  if (!remoteEnabled()) throw new Error("Supabase is required for photo upload.");
+  if (!file.type.startsWith("image/")) throw new Error(`${file.name} is not an image.`);
+
+  const blob = await compressPhoto(file);
+  if (!blob) throw new Error(`Could not compress ${file.name}.`);
+
+  const objectPath = `group-${match.group.id}/${crypto.randomUUID()}.webp`;
+  const { error: uploadError } = await supabaseClient
+    .storage
+    .from("newbie-display")
+    .upload(objectPath, blob, { contentType: "image/webp", upsert: false });
+  if (uploadError) throw uploadError;
+
+  const { error: recordError } = await supabaseClient
+    .from("newbie_photos")
+    .upsert({
+      participant_name: match.person,
+      group_id: match.group.id,
+      group_name: match.group.name,
+      object_path: objectPath
+    }, { onConflict: "participant_name" });
+  if (recordError) throw recordError;
+}
+
 function syncLabel() {
   if (!remoteEnabled()) return cfg.demoMode ? "Preview mode" : "Offline mode";
   if (state.syncStatus === "online") return "Live Supabase";
@@ -720,10 +839,11 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, corrections, remarks, reports, history] = await Promise.all([
+    const [mentorsResult, corrections, remarks, photoRecords, reports, history] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       supabaseClient.from("group_corrections").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("individual_remarks").select("*").order("updated_at", { ascending: false }),
+      supabaseClient.from("newbie_photos").select("*").order("updated_at", { ascending: false }),
       includeAdminData ? supabaseClient.from("ai_reports").select("*").order("generated_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
       includeAdminData ? supabaseClient.from("change_history").select("*").order("changed_at", { ascending: false }).limit(50) : Promise.resolve({ data: [], error: null })
     ]);
@@ -731,6 +851,7 @@ async function loadSharedData(options = {}) {
     for (const result of [corrections, remarks, reports, history]) {
       if (result.error) throw result.error;
     }
+    if (photoRecords.error) console.warn("Could not load newbie_photos table. Run the photo SQL setup when ready.", photoRecords.error);
     if (!mentorsResult.error) applyMentorRows(mentorsResult.data);
     else console.warn("Could not load mentors table; using local mentor list.", mentorsResult.error);
 
@@ -740,6 +861,8 @@ async function loadSharedData(options = {}) {
 
     corrections.data.forEach(applyGroupCorrectionRow);
     remarks.data.forEach(applyIndividualRemarkRow);
+    applyPhotoRows(photoRecords.error ? [] : photoRecords.data);
+    await hydratePhotoUrls();
     if (includeAdminData) {
       reports.data.forEach(applyReportRow);
       state.changeHistory = history.data || [];
@@ -780,6 +903,12 @@ function subscribeSharedData() {
     .on("postgres_changes", { event: "*", schema: "public", table: "individual_remarks" }, payload => {
       if (payload.eventType === "DELETE") removeIndividualRemarkRow(payload.old);
       else applyIndividualRemarkRow(payload.new);
+      scheduleRefresh();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "newbie_photos" }, async payload => {
+      if (payload.eventType === "DELETE") removePhotoRow(payload.old);
+      else applyPhotoRow(payload.new);
+      await hydratePhotoUrls();
       scheduleRefresh();
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "ai_reports" }, payload => {
@@ -1085,7 +1214,7 @@ function correctionView(groupId, qid = 1) {
     : correction.workState === "in_progress"
       ? `In progress by ${correction.mentorName || "a mentor"}`
       : "Not started yet";
-  shell(`<main class="page guided-review"><nav class="journey" aria-label="Review steps"><span class="done">✓ <b>Mentor</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Question ${q.id}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="dashboard">← Change group</button><div class="question-progress"><span>Question ${q.id} of ${state.data.questions.length}</span><div><i style="width:${q.id / state.data.questions.length * 100}%"></i></div></div><span class="autosave-note">${esc(ownerCopy)}</span></div><details class="question-jump"><summary>Jump to another question</summary><div class="question-nav">${state.data.questions.map(item => { const itemCorrection = state.groupCorrections[correctionKey(group.id, item.id)] || {}; return `<button class="qdot ${itemCorrection.status ? "done" : itemCorrection.workState === "in_progress" ? "started" : ""} ${item.id === q.id ? "active" : ""}" title="${esc(itemCorrection.status ? `${itemCorrection.marksAwarded ?? 0}/${itemCorrection.maxMarks ?? "?"} marks by ${itemCorrection.mentorName || "mentor"}` : itemCorrection.workState === "in_progress" ? `In progress by ${itemCorrection.mentorName || "mentor"}` : "Not started")}" data-group-q="${group.id}" data-q="${item.id}">${item.id}</button>`; }).join("")}</div></details><section class="workflow"><form id="group-review-form" data-group="${group.id}" data-q="${q.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Shared marking</p><h1>${esc(q.title)}</h1><p class="subtle">${esc(q.prompt)}${q.maxMarks ? ` · Worth ${q.maxMarks} marks` : " · Marks pending"}</p><button class="answer-toggle" type="button" data-action="toggle-answer">💡 Answer / tests</button>${answerGuideView(q)}<div class="section-label"><span>1</span><div><strong>Give the group mark</strong><small>One shared mark per question. You can edit what another mentor started.</small></div></div>${markPickerView(q, markValue)}<label>Correction or model answer <small class="optional">Optional</small><textarea name="correction" placeholder="What is the correct answer or approach?">${esc(correction.correction)}</textarea></label><label>Group observation <small class="optional">Optional</small><textarea name="groupRemark" placeholder="What did the group do well, or what should they improve?">${esc(correction.groupRemark)}</textarea></label></article><article class="card individual-card"><div class="section-label"><span>2</span><div><strong>Any personal remarks?</strong><small>Optional — shared per participant/question, visible in admin only</small></div></div><div class="remark-list">${group.participants.map(person => { const entry = state.individualRemarks[remarkKey(group.id, person, q.id)] || {}; const remark = typeof entry === "string" ? entry : entry.remark || ""; return `<label>${esc(person)}<textarea class="compact" name="remark::${esc(person)}" placeholder="Short, constructive note for admin…">${esc(remark)}</textarea></label>`; }).join("")}</div></article><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & leave</button><button class="primary" type="submit" name="destination" value="next">${q.id === state.data.questions.length ? "Finish group ✓" : "Save & continue →"}</button></div></form></section></main>`);
+  shell(`<main class="page guided-review"><nav class="journey" aria-label="Review steps"><span class="done">✓ <b>Mentor</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Question ${q.id}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="dashboard">← Change group</button><div class="question-progress"><span>Question ${q.id} of ${state.data.questions.length}</span><div><i style="width:${q.id / state.data.questions.length * 100}%"></i></div></div><span class="autosave-note">${esc(ownerCopy)}</span></div><details class="question-jump"><summary>Jump to another question</summary><div class="question-nav">${state.data.questions.map(item => { const itemCorrection = state.groupCorrections[correctionKey(group.id, item.id)] || {}; return `<button class="qdot ${itemCorrection.status ? "done" : itemCorrection.workState === "in_progress" ? "started" : ""} ${item.id === q.id ? "active" : ""}" title="${esc(itemCorrection.status ? `${itemCorrection.marksAwarded ?? 0}/${itemCorrection.maxMarks ?? "?"} marks by ${itemCorrection.mentorName || "mentor"}` : itemCorrection.workState === "in_progress" ? `In progress by ${itemCorrection.mentorName || "mentor"}` : "Not started")}" data-group-q="${group.id}" data-q="${item.id}">${item.id}</button>`; }).join("")}</div></details><section class="workflow"><form id="group-review-form" data-group="${group.id}" data-q="${q.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Shared marking</p><h1>${esc(q.title)}</h1><p class="subtle">${esc(q.prompt)}${q.maxMarks ? ` · Worth ${q.maxMarks} marks` : " · Marks pending"}</p><button class="answer-toggle" type="button" data-action="toggle-answer">💡 Answer / tests</button>${answerGuideView(q)}<div class="section-label"><span>1</span><div><strong>Give the group mark</strong><small>One shared mark per question. You can edit what another mentor started.</small></div></div>${markPickerView(q, markValue)}<label>Correction or model answer <small class="optional">Optional</small><textarea name="correction" placeholder="What is the correct answer or approach?">${esc(correction.correction)}</textarea></label><label>Group observation <small class="optional">Optional</small><textarea name="groupRemark" placeholder="What did the group do well, or what should they improve?">${esc(correction.groupRemark)}</textarea></label></article><article class="card individual-card"><div class="section-label"><span>2</span><div><strong>Any personal remarks?</strong><small>Optional — shared per participant/question, visible in admin only</small></div></div><div class="remark-list">${group.participants.map(person => { const entry = state.individualRemarks[remarkKey(group.id, person, q.id)] || {}; const remark = typeof entry === "string" ? entry : entry.remark || ""; return `<label>${participantNameBlock(person)}<textarea class="compact" name="remark::${esc(person)}" placeholder="Short, constructive note for admin…">${esc(remark)}</textarea></label>`; }).join("")}</div></article><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & leave</button><button class="primary" type="submit" name="destination" value="next">${q.id === state.data.questions.length ? "Finish group ✓" : "Save & continue →"}</button></div></form></section></main>`);
 }
 
 function showToast(message) {
@@ -1138,11 +1267,17 @@ function historyList() {
   return `<div class="mentor-inputs history-list">${state.changeHistory.slice(0, 12).map(item => `<div><span class="avatar">${esc((item.mentor_name || "?").slice(0, 1))}</span><strong>${esc(item.mentor_name || "System")}</strong><small>${esc(item.action)} ${esc(item.table_name)} · ${esc(item.group_name || "")}${item.question_position ? ` · Q${item.question_position}` : ""}<br>${new Date(item.changed_at).toLocaleString()}</small></div>`).join("")}</div>`;
 }
 
+function photoManagerView() {
+  const participants = allParticipants();
+  const uploaded = participants.filter(({ person }) => state.participantPhotos[person]).length;
+  return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Photo manager</p><h2>Newbie photos</h2></div><span class="ai-badge">${uploaded}/${participants.length} uploaded</span></div><form id="photo-upload-form" class="photo-upload-form"><label>Upload photo folder or multiple photos<input name="photos" type="file" accept="image/*" multiple webkitdirectory directory></label><button class="primary" type="submit">Upload & match photos</button><p class="subtle">Name files like <code>Sollinselvan Curpen.jpg</code>. The app compresses them to display-size WebP files and stores random paths in Supabase.</p></form><div class="photo-admin-grid">${participants.map(({ group, person }) => `<div class="${state.participantPhotos[person] ? "has-photo" : ""}">${participantAvatar(person, "medium")}<strong>${esc(person)}</strong><small>${esc(group.name)} · ${state.participantPhotos[person] ? "Photo ready" : "No photo yet"}</small></div>`).join("")}</div></article>`;
+}
+
 function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks()}</strong><span>Known total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Mentor management</p><h2>Spoon mentors</h2></div><span class="ai-badge">${state.mentors.length} active</span></div><form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div></article><article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><div class="subtle-actions"><span class="ai-badge">${esc(syncLabel())}</span>${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div></div>${historyList()}</article>${state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">${groupScore(group)}/${knownTotalMarks()} marks</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile"><strong>${esc(person)}</strong><p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("")}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks()}</strong><span>Known total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${photoManagerView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Mentor management</p><h2>Spoon mentors</h2></div><span class="ai-badge">${state.mentors.length} active</span></div><form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div></article><article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><div class="subtle-actions"><span class="ai-badge">${esc(syncLabel())}</span>${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div></div>${historyList()}</article>${state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">${groupScore(group)}/${knownTotalMarks()} marks</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("")}</section></main>`);
 }
 
 function openPublicForm() {
@@ -1179,6 +1314,28 @@ document.addEventListener("submit", async event => {
       adminDashboard(lastAdminMentor);
     } catch (error) {
       showToast(error.message || "Could not add mentor.");
+    }
+  }
+
+  if (event.target.id === "photo-upload-form") {
+    const files = [...event.target.elements.photos.files];
+    if (!files.length) return alert("Choose a folder or photos to upload.");
+
+    const matched = files
+      .map(file => ({ file, match: matchParticipantFromFile(file) }))
+      .filter(item => item.match);
+    const unmatched = files.length - matched.length;
+    if (!matched.length) return alert("No photos matched participant names. Rename files to match participant names, for example: Sollinselvan Curpen.jpg");
+
+    try {
+      showToast(`Uploading ${matched.length} photo(s)…`);
+      for (const item of matched) await uploadParticipantPhoto(item.file, item.match);
+      await loadSharedData({ includeAdminData: true });
+      showToast(`✓ Uploaded ${matched.length} photo(s)${unmatched ? ` · ${unmatched} unmatched` : ""}`);
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      console.error("Photo upload failed", error);
+      showToast(error.message ? `Photo upload failed: ${error.message}` : "Photo upload failed.");
     }
   }
 
