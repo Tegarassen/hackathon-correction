@@ -567,7 +567,7 @@ const photoFor = person => state.photoUrls?.[person] || "";
 function participantAvatar(person, size = "small") {
   const url = photoFor(person);
   return url
-    ? `<img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false">`
+    ? `<button type="button" class="photo-open" data-photo-url="${esc(url)}" data-photo-name="${esc(person)}" title="Open ${esc(person)} photo"><img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false"></button>`
     : `<span class="participant-photo placeholder ${size}">${esc(initials(person))}</span>`;
 }
 
@@ -1226,6 +1226,18 @@ function showToast(message) {
   setTimeout(() => toast.remove(), 2800);
 }
 
+function openPhotoViewer(url, name) {
+  document.querySelector(".photo-viewer")?.remove();
+  const viewer = document.createElement("div");
+  viewer.className = "photo-viewer";
+  viewer.innerHTML = `<div class="photo-viewer-card" role="dialog" aria-modal="true" aria-label="${esc(name)} photo"><button class="photo-viewer-close" type="button" data-action="close-photo">×</button><img src="${esc(url)}" alt="${esc(name)}" draggable="false" oncontextmenu="return false"><strong>${esc(name)}</strong><small>Tap outside or press Esc to close</small></div>`;
+  document.body.appendChild(viewer);
+}
+
+function closePhotoViewer() {
+  document.querySelector(".photo-viewer")?.remove();
+}
+
 function buildGroupSummary(group) {
   const entries = Object.entries(state.groupCorrections).filter(([key]) => key.split("|")[0] === String(group.id)).map(([key, value]) => ({ question: key.split("|")[1], ...value }));
   if (!entries.length) return "No mentor corrections have been submitted yet.";
@@ -1270,7 +1282,7 @@ function historyList() {
 function photoManagerView() {
   const participants = allParticipants();
   const uploaded = participants.filter(({ person }) => state.participantPhotos[person]).length;
-  return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Photo manager</p><h2>Newbie photos</h2></div><span class="ai-badge">${uploaded}/${participants.length} uploaded</span></div><form id="photo-upload-form" class="photo-upload-form"><label>Upload photo folder or multiple photos<input name="photos" type="file" accept="image/*" multiple webkitdirectory directory></label><button class="primary" type="submit">Upload & match photos</button><p class="subtle">Name files like <code>Sollinselvan Curpen.jpg</code>. The app compresses them to display-size WebP files and stores random paths in Supabase.</p></form><div class="photo-admin-grid">${participants.map(({ group, person }) => `<div class="${state.participantPhotos[person] ? "has-photo" : ""}">${participantAvatar(person, "medium")}<strong>${esc(person)}</strong><small>${esc(group.name)} · ${state.participantPhotos[person] ? "Photo ready" : "No photo yet"}</small></div>`).join("")}</div></article>`;
+  return `<details class="card report-card photo-manager-tab"><summary><span><strong>Newbie photo upload</strong><small>Hidden admin tool · ${uploaded}/${participants.length} uploaded</small></span><span class="ai-badge">Open</span></summary><form id="photo-upload-form" class="photo-upload-form"><label>Upload photo folder or multiple photos<input name="photos" type="file" accept="image/*" multiple webkitdirectory directory></label><button class="primary" type="submit">Upload & match photos</button><p class="subtle">Name files like <code>Sollinselvan Curpen.jpg</code>. The app compresses them to display-size WebP files and stores random paths in Supabase.</p></form><div class="photo-admin-grid">${participants.map(({ group, person }) => `<div class="${state.participantPhotos[person] ? "has-photo" : ""}">${participantAvatar(person, "medium")}<strong>${esc(person)}</strong><small>${esc(group.name)} · ${state.participantPhotos[person] ? "Photo ready" : "No photo yet"}</small></div>`).join("")}</div></details>`;
 }
 
 function adminDashboard(selectedMentor = "all") {
@@ -1385,8 +1397,19 @@ document.addEventListener("submit", async event => {
 
 document.addEventListener("click", async event => {
   const button = event.target.closest("button");
-  if (!button) return;
+  if (!button) {
+    if (event.target.classList?.contains("photo-viewer")) closePhotoViewer();
+    return;
+  }
 
+  if (button.dataset.photoUrl) {
+    openPhotoViewer(button.dataset.photoUrl, button.dataset.photoName || "Participant");
+    return;
+  }
+  if (button.dataset.action === "close-photo") {
+    closePhotoViewer();
+    return;
+  }
   if (button.dataset.action === "logout") await signOutAdmin();
   if (button.dataset.action === "admin-login") {
     location.hash = "admin";
@@ -1501,6 +1524,10 @@ document.addEventListener("change", event => {
   save();
   mentorDashboard();
   showToast(`Now reviewing as ${state.activeMentor}`);
+});
+
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") closePhotoViewer();
 });
 
 async function boot() {
