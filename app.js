@@ -58,17 +58,26 @@ const groupById = id => state.data.groups.find(group => group.id === Number(id))
 const remoteEnabled = () => Boolean(supabaseClient);
 const adminAuthEnabled = () => remoteEnabled() && !cfg.demoMode;
 const knownTotalMarks = () => state.data.questions.reduce((sum, q) => sum + (Number(q.maxMarks) || 0), 0);
-const markStatus = (mark, max) => {
+const normalizeMark = (mark, max) => {
+  if (mark === "" || mark === null || mark === undefined) return null;
   const value = Number(mark);
-  const total = Number(max);
   if (!Number.isFinite(value)) return null;
+  const safeValue = Math.max(0, value);
+  const total = Number(max);
+  if (Number.isFinite(total) && total >= 0) return Math.min(safeValue, total);
+  return safeValue;
+};
+const markStatus = (mark, max) => {
+  const value = normalizeMark(mark, max);
+  const total = Number(max);
+  if (value === null) return null;
   if (value <= 0) return "incorrect";
   if (Number.isFinite(total) && total > 0 && value >= total) return "correct";
   return "partial";
 };
 const groupScore = group => state.data.questions.reduce((sum, question) => {
   const correction = state.groupCorrections[correctionKey(group.id, question.id)];
-  return sum + (Number(correction?.marksAwarded) || 0);
+  return sum + (normalizeMark(correction?.marksAwarded, question.maxMarks) || 0);
 }, 0);
 const scoreboard = () => state.data.groups
   .map(group => ({ group, score: groupScore(group), max: knownTotalMarks() }))
@@ -553,11 +562,13 @@ function syncLabel() {
 
 function applyGroupCorrectionRow(row) {
   if (!row) return;
+  const question = state.data.questions.find(item => item.id === Number(row.question_position));
+  const maxMarks = row.max_marks ?? question?.maxMarks ?? null;
   state.groupCorrections[correctionKey(row.group_id, row.question_position)] = {
     status: row.status,
     workState: row.work_state || (row.status ? "completed" : "in_progress"),
-    marksAwarded: row.marks_awarded,
-    maxMarks: row.max_marks,
+    marksAwarded: normalizeMark(row.marks_awarded, maxMarks),
+    maxMarks,
     correction: row.correction || "",
     groupRemark: row.group_remark || "",
     mentorName: row.mentor_name || "",
@@ -797,8 +808,8 @@ async function persistReview(group, qid, formData) {
   state.syncStatus = "saving";
   scheduleRefresh();
   const question = state.data.questions.find(item => item.id === Number(qid));
-  const marksAwarded = formData.marksAwarded === "" ? null : Number(formData.marksAwarded);
   const maxMarks = question?.maxMarks ?? null;
+  const marksAwarded = normalizeMark(formData.marksAwarded, maxMarks);
 
   const correctionPayload = {
     group_id: group.id,
@@ -1018,6 +1029,39 @@ function answerGuideView(question) {
   </div>`;
 }
 
+function markPickerView(question, value) {
+  const max = Number(question.maxMarks);
+  if (!Number.isFinite(max) || max <= 0) {
+    return `<div class="mark-picker disabled">
+      <input type="hidden" name="marksAwarded" value="0">
+      <div class="pending-mark-box">
+        <strong>Marks pending</strong>
+        <span>Saved as 0 points until this question has an official maximum.</span>
+      </div>
+      <p>Mentors can still add remarks, but no extra score can be added accidentally.</p>
+    </div>`;
+  }
+
+  const selected = value === "" || value === null || value === undefined ? "" : Number(value);
+  const values = Array.from({ length: Math.round(max * 2) + 1 }, (_, index) => index / 2);
+  const wholeMarks = values.filter(item => Number.isInteger(item));
+  const optionLabel = item => `${item} / ${max}`;
+  const optionValue = item => String(item);
+
+  return `<div class="mark-picker">
+    <label>Mark awarded <small class="optional">Choose from 0 to ${esc(max)} only</small>
+      <select name="marksAwarded" required data-mark-select>
+        <option value="">Select mark…</option>
+        ${values.map(item => `<option value="${optionValue(item)}" ${selected === item ? "selected" : ""}>${optionLabel(item)}</option>`).join("")}
+      </select>
+    </label>
+    <div class="mark-chips" aria-label="Quick mark buttons">
+      ${wholeMarks.map(item => `<button type="button" class="mark-chip ${selected === item ? "active" : ""}" data-mark-value="${optionValue(item)}">${item}</button>`).join("")}
+    </div>
+    <p>Use the dropdown for half marks. Quick buttons are whole marks only.</p>
+  </div>`;
+}
+
 function groupState(group) {
   const completed = state.data.questions.filter(q => state.groupCorrections[correctionKey(group.id, q.id)]?.status).length;
   const started = state.data.questions.filter(q => state.groupCorrections[correctionKey(group.id, q.id)]?.workState === "in_progress").length;
@@ -1035,14 +1079,13 @@ function correctionView(groupId, qid = 1) {
   const group = groupById(groupId);
   const q = state.data.questions.find(item => item.id === Number(qid));
   const correction = state.groupCorrections[correctionKey(group.id, q.id)] || {};
-  const markValue = correction.marksAwarded ?? "";
-  const maxCopy = q.maxMarks ? ` / ${q.maxMarks} marks` : " marks";
+  const markValue = normalizeMark(correction.marksAwarded, q.maxMarks) ?? "";
   const ownerCopy = correction.status
     ? `Completed by ${correction.mentorName || "a mentor"}`
     : correction.workState === "in_progress"
       ? `In progress by ${correction.mentorName || "a mentor"}`
       : "Not started yet";
-  shell(`<main class="page guided-review"><nav class="journey" aria-label="Review steps"><span class="done">✓ <b>Mentor</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Question ${q.id}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="dashboard">← Change group</button><div class="question-progress"><span>Question ${q.id} of ${state.data.questions.length}</span><div><i style="width:${q.id / state.data.questions.length * 100}%"></i></div></div><span class="autosave-note">${esc(ownerCopy)}</span></div><details class="question-jump"><summary>Jump to another question</summary><div class="question-nav">${state.data.questions.map(item => { const itemCorrection = state.groupCorrections[correctionKey(group.id, item.id)] || {}; return `<button class="qdot ${itemCorrection.status ? "done" : itemCorrection.workState === "in_progress" ? "started" : ""} ${item.id === q.id ? "active" : ""}" title="${esc(itemCorrection.status ? `${itemCorrection.marksAwarded ?? 0}/${itemCorrection.maxMarks ?? "?"} marks by ${itemCorrection.mentorName || "mentor"}` : itemCorrection.workState === "in_progress" ? `In progress by ${itemCorrection.mentorName || "mentor"}` : "Not started")}" data-group-q="${group.id}" data-q="${item.id}">${item.id}</button>`; }).join("")}</div></details><section class="workflow"><form id="group-review-form" data-group="${group.id}" data-q="${q.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Shared marking</p><h1>${esc(q.title)}</h1><p class="subtle">${esc(q.prompt)}${q.maxMarks ? ` · Worth ${q.maxMarks} marks` : " · Marks pending"}</p><button class="answer-toggle" type="button" data-action="toggle-answer">💡 Answer / tests</button>${answerGuideView(q)}<div class="section-label"><span>1</span><div><strong>Give the group mark</strong><small>One shared mark per question. You can edit what another mentor started.</small></div></div><label>Mark awarded <small class="optional">${esc(maxCopy)}</small><input name="marksAwarded" type="number" min="0" ${q.maxMarks ? `max="${q.maxMarks}" step="0.5"` : `step="0.5"`} value="${esc(markValue)}" placeholder="0${q.maxMarks ? ` to ${q.maxMarks}` : ""}" required></label><label>Correction or model answer <small class="optional">Optional</small><textarea name="correction" placeholder="What is the correct answer or approach?">${esc(correction.correction)}</textarea></label><label>Group observation <small class="optional">Optional</small><textarea name="groupRemark" placeholder="What did the group do well, or what should they improve?">${esc(correction.groupRemark)}</textarea></label></article><article class="card individual-card"><div class="section-label"><span>2</span><div><strong>Any personal remarks?</strong><small>Optional — shared per participant/question, visible in admin only</small></div></div><div class="remark-list">${group.participants.map(person => { const entry = state.individualRemarks[remarkKey(group.id, person, q.id)] || {}; const remark = typeof entry === "string" ? entry : entry.remark || ""; return `<label>${esc(person)}<textarea class="compact" name="remark::${esc(person)}" placeholder="Short, constructive note for admin…">${esc(remark)}</textarea></label>`; }).join("")}</div></article><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & leave</button><button class="primary" type="submit" name="destination" value="next">${q.id === state.data.questions.length ? "Finish group ✓" : "Save & continue →"}</button></div></form></section></main>`);
+  shell(`<main class="page guided-review"><nav class="journey" aria-label="Review steps"><span class="done">✓ <b>Mentor</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Question ${q.id}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="dashboard">← Change group</button><div class="question-progress"><span>Question ${q.id} of ${state.data.questions.length}</span><div><i style="width:${q.id / state.data.questions.length * 100}%"></i></div></div><span class="autosave-note">${esc(ownerCopy)}</span></div><details class="question-jump"><summary>Jump to another question</summary><div class="question-nav">${state.data.questions.map(item => { const itemCorrection = state.groupCorrections[correctionKey(group.id, item.id)] || {}; return `<button class="qdot ${itemCorrection.status ? "done" : itemCorrection.workState === "in_progress" ? "started" : ""} ${item.id === q.id ? "active" : ""}" title="${esc(itemCorrection.status ? `${itemCorrection.marksAwarded ?? 0}/${itemCorrection.maxMarks ?? "?"} marks by ${itemCorrection.mentorName || "mentor"}` : itemCorrection.workState === "in_progress" ? `In progress by ${itemCorrection.mentorName || "mentor"}` : "Not started")}" data-group-q="${group.id}" data-q="${item.id}">${item.id}</button>`; }).join("")}</div></details><section class="workflow"><form id="group-review-form" data-group="${group.id}" data-q="${q.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Shared marking</p><h1>${esc(q.title)}</h1><p class="subtle">${esc(q.prompt)}${q.maxMarks ? ` · Worth ${q.maxMarks} marks` : " · Marks pending"}</p><button class="answer-toggle" type="button" data-action="toggle-answer">💡 Answer / tests</button>${answerGuideView(q)}<div class="section-label"><span>1</span><div><strong>Give the group mark</strong><small>One shared mark per question. You can edit what another mentor started.</small></div></div>${markPickerView(q, markValue)}<label>Correction or model answer <small class="optional">Optional</small><textarea name="correction" placeholder="What is the correct answer or approach?">${esc(correction.correction)}</textarea></label><label>Group observation <small class="optional">Optional</small><textarea name="groupRemark" placeholder="What did the group do well, or what should they improve?">${esc(correction.groupRemark)}</textarea></label></article><article class="card individual-card"><div class="section-label"><span>2</span><div><strong>Any personal remarks?</strong><small>Optional — shared per participant/question, visible in admin only</small></div></div><div class="remark-list">${group.participants.map(person => { const entry = state.individualRemarks[remarkKey(group.id, person, q.id)] || {}; const remark = typeof entry === "string" ? entry : entry.remark || ""; return `<label>${esc(person)}<textarea class="compact" name="remark::${esc(person)}" placeholder="Short, constructive note for admin…">${esc(remark)}</textarea></label>`; }).join("")}</div></article><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & leave</button><button class="primary" type="submit" name="destination" value="next">${q.id === state.data.questions.length ? "Finish group ✓" : "Save & continue →"}</button></div></form></section></main>`);
 }
 
 function showToast(message) {
@@ -1147,9 +1190,9 @@ document.addEventListener("submit", async event => {
     const group = groupById(event.target.dataset.group);
     const qid = Number(event.target.dataset.q);
     const question = state.data.questions.find(item => item.id === qid);
-    const marksAwarded = Number(data.marksAwarded);
-    if (!Number.isFinite(marksAwarded) || marksAwarded < 0) return alert("Enter a valid mark.");
-    if (question?.maxMarks && marksAwarded > question.maxMarks) return alert(`Maximum for this question is ${question.maxMarks} marks.`);
+    const marksAwarded = normalizeMark(data.marksAwarded, question?.maxMarks);
+    if (marksAwarded === null) return alert("Choose a valid mark.");
+    data.marksAwarded = String(marksAwarded);
     state.groupCorrections[correctionKey(group.id, qid)] = {
       status: markStatus(marksAwarded, question?.maxMarks),
       workState: "completed",
@@ -1201,6 +1244,14 @@ document.addEventListener("click", async event => {
     panel?.classList.toggle("hidden");
     const isHidden = panel?.classList.contains("hidden");
     button.textContent = isHidden ? "💡 Answer / tests" : "Hide answer / tests";
+    return;
+  }
+  if (button.dataset.markValue) {
+    const picker = button.closest(".mark-picker");
+    const select = picker?.querySelector("[data-mark-select]");
+    if (!select) return;
+    select.value = button.dataset.markValue;
+    picker.querySelectorAll(".mark-chip").forEach(chip => chip.classList.toggle("active", chip === button));
     return;
   }
   if (button.dataset.mentor) {
@@ -1282,6 +1333,11 @@ document.addEventListener("click", async event => {
 });
 
 document.addEventListener("change", event => {
+  if (event.target.matches("[data-mark-select]")) {
+    const picker = event.target.closest(".mark-picker");
+    picker?.querySelectorAll(".mark-chip").forEach(chip => chip.classList.toggle("active", chip.dataset.markValue === event.target.value));
+    return;
+  }
   if (event.target.id !== "mentor-select") return;
   state.activeMentor = event.target.value;
   state.session = { name: state.activeMentor, role: "mentor" };
