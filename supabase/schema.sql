@@ -107,6 +107,17 @@ create table if not exists public.mini_project_reviews (
   unique (group_id, jury_name)
 );
 
+create table if not exists public.mini_project_assignments (
+  group_id integer primary key,
+  group_name text not null,
+  topic_key text not null check (topic_key in ('smart_budget_moris', 'health_alert_mauritius', 'water_wise_moris')),
+  topic_title text not null,
+  topic_subtitle text not null default '',
+  topic_brief text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.newbie_photos
   alter column uploaded_by set default auth.uid();
 
@@ -282,6 +293,11 @@ create trigger mini_project_reviews_updated_at
 before update on public.mini_project_reviews
 for each row execute function public.set_updated_at();
 
+drop trigger if exists mini_project_assignments_updated_at on public.mini_project_assignments;
+create trigger mini_project_assignments_updated_at
+before update on public.mini_project_assignments
+for each row execute function public.set_updated_at();
+
 create or replace function public.log_group_correction_change()
 returns trigger
 language plpgsql
@@ -371,6 +387,7 @@ alter table public.mentors enable row level security;
 alter table public.juries enable row level security;
 alter table public.newbie_photos enable row level security;
 alter table public.mini_project_reviews enable row level security;
+alter table public.mini_project_assignments enable row level security;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -394,6 +411,8 @@ grant insert, update, delete on public.juries to authenticated;
 grant select on public.newbie_photos to anon, authenticated;
 grant insert, update, delete on public.newbie_photos to authenticated;
 grant select, insert, update, delete on public.mini_project_reviews to anon, authenticated;
+grant select on public.mini_project_assignments to anon, authenticated;
+grant insert, update, delete on public.mini_project_assignments to authenticated;
 grant select, insert, update, delete on public.group_corrections to anon, authenticated;
 grant select, insert, update, delete on public.individual_remarks to anon, authenticated;
 grant select, insert, update, delete on public.ai_reports to authenticated;
@@ -483,6 +502,19 @@ create policy "admin delete mini project reviews"
 on public.mini_project_reviews for delete
 to authenticated
 using (public.is_admin());
+
+drop policy if exists "public read mini project assignments" on public.mini_project_assignments;
+create policy "public read mini project assignments"
+on public.mini_project_assignments for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "admin manage mini project assignments" on public.mini_project_assignments;
+create policy "admin manage mini project assignments"
+on public.mini_project_assignments for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
 
 drop policy if exists "anyone can view newbie display photos" on storage.objects;
 create policy "anyone can view newbie display photos"
@@ -643,5 +675,11 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.mini_project_reviews;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.mini_project_assignments;
 exception when duplicate_object then null;
 end $$;
