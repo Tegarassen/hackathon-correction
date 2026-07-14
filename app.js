@@ -718,7 +718,7 @@ async function compressPhoto(file) {
 
 async function uploadParticipantPhoto(file, match) {
   if (state.session?.role !== "admin") throw new Error("Only admin can upload photos.");
-  if (!remoteEnabled()) throw new Error("Supabase is required for photo upload.");
+  if (!remoteEnabled()) throw new Error("Online photo upload is not available on this device.");
   if (!file.type.startsWith("image/")) throw new Error(`${file.name} is not an image.`);
 
   const blob = await compressPhoto(file);
@@ -744,11 +744,44 @@ async function uploadParticipantPhoto(file, match) {
 
 function syncLabel() {
   if (!remoteEnabled()) return cfg.demoMode ? "Preview mode" : "Offline mode";
-  if (state.syncStatus === "online") return "Live Supabase";
+  if (state.syncStatus === "online") return "Live online";
   if (state.syncStatus === "saving") return "Saving…";
-  if (state.syncStatus === "error") return "Sync issue";
+  if (state.syncStatus === "error") return "Connection issue";
   return "Connecting…";
 }
+
+function friendlyError(error, fallback = "Something went wrong. Please try again.") {
+  const message = String(error?.message || error || "").trim();
+  const lower = message.toLowerCase();
+  const safeValidation = [
+    "only admin",
+    "enter ",
+    "choose ",
+    "already exists",
+    "keep at least one",
+    "not an image",
+    "could not compress",
+    "online photo upload",
+    "admin email or password",
+    "for preview mode",
+    "this account is not approved"
+  ];
+
+  if (!message) return fallback;
+  if (safeValidation.some(fragment => lower.includes(fragment))) return message;
+  if (lower.includes("invalid login") || lower.includes("invalid credentials")) return "Admin email or password is incorrect.";
+  if (lower.includes("jwt") || lower.includes("session") || lower.includes("auth")) return "Your admin session expired. Please sign in again.";
+  if (lower.includes("permission denied") || lower.includes("row-level security") || lower.includes("rls") || lower.includes("not registered as an admin")) return "You do not have permission to do that. Ask an admin to check your access.";
+  if (lower.includes("could not find the table") || lower.includes("schema cache") || lower.includes("does not exist") || lower.includes("relation")) return "This feature is not fully set up yet. Ask an admin to run the latest setup script.";
+  if (lower.includes("duplicate key") || lower.includes("unique constraint")) return "This item already exists. Refresh the page and try again.";
+  if (lower.includes("bucket") || lower.includes("storage") || lower.includes("newbie-display")) return "Photo upload storage is not ready yet. Ask an admin to check the photo setup.";
+  if (lower.includes("network") || lower.includes("failed to fetch") || lower.includes("timeout") || lower.includes("fetch")) return "Connection issue. Your changes are kept on this device; try again when the connection is stable.";
+  return fallback;
+}
+
+const savedOnlineMessage = item => remoteEnabled() ? `✓ ${item} saved online` : `✓ ${item} saved on this device`;
+const updatedOnlineMessage = item => remoteEnabled() ? `✓ ${item} updated online` : `✓ ${item} updated on this device`;
+const localSyncIssueMessage = action => `Saved on this device, but could not ${action} online. Try again when the connection is stable.`;
 
 function applyGroupCorrectionRow(row) {
   if (!row) return;
@@ -998,7 +1031,7 @@ async function signInAdmin(email, password) {
   const { data: isAdmin, error: adminError } = await supabaseClient.rpc("is_admin");
   if (adminError || !isAdmin) {
     await supabaseClient.auth.signOut();
-    throw new Error("This Supabase user is not registered as an admin.");
+    throw new Error("This account is not approved as an admin.");
   }
 
   state.session = {
@@ -1071,10 +1104,10 @@ async function loadSharedData(options = {}) {
     state.syncStatus = "online";
     saveLocal();
   } catch (error) {
-    console.error("Supabase load failed", error);
+    console.error("Shared data load failed", error);
     state.syncStatus = "error";
     saveLocal();
-    showToast(error.message ? `Supabase load failed: ${error.message}` : "Could not load Supabase data. Using local copy.");
+    showToast(friendlyError(error, "Could not refresh shared data. Using the copy saved on this device."));
   }
 }
 
@@ -1356,14 +1389,14 @@ async function saveMiniProjectDraft(form, options = {}) {
   try {
     await persistMiniProjectReview(group, data);
     updateMiniProjectAutosaveUi(review);
-    if (options.toast) showToast(remoteEnabled() ? "✓ Mini project review saved to Supabase" : "✓ Mini project review saved locally");
+    if (options.toast) showToast(savedOnlineMessage("Mini-project review"));
   } catch (error) {
     console.error("Mini project autosave failed", error);
     state.syncStatus = "error";
     save();
-    const note = document.querySelector(".mini-toolbar .autosave-note");
-    if (note) note.textContent = "Saved locally";
-    if (options.toast) showToast(error.message ? `Supabase sync failed: ${error.message}` : "Saved locally, but Supabase sync failed.");
+    const note = document.querySelector(".mini-review-topbar .autosave-note, .mini-toolbar .autosave-note");
+    if (note) note.textContent = "Saved on this device";
+    if (options.toast) showToast(friendlyError(error, localSyncIssueMessage("update the shared review")));
   }
 
   return review;
@@ -1595,15 +1628,15 @@ function shell(content) {
 
 function loginView(message = "") {
   const returnLabel = location.hash === "#mini-project" ? "← Return to jury page" : "← Return";
-  app.innerHTML = `<main class="login"><section class="login-art"><div class="brand"><img class="spoon-logo login-logo" src="https://spoonconsulting.com/wp-content/uploads/elementor/thumbs/Logo-Spoon-Spoon-Consulting-2024-scaled-rah72gsdflipzz9bau5ypzlaz4ldjbb0h0vj24z8x8.webp" alt="Spoon Consulting"></div><div><p class="eyebrow">Protected area</p><h1>Admin.<br><span style="color:#12aaa3">Reports.</span><br><span class="orange-text">Insights.</span></h1><p class="subtle login-copy">The mentor and jury forms are separated. Consolidated feedback and participant reports remain in the protected administrator area.</p></div><button class="secondary public-return" data-action="return-current">${returnLabel}</button></section><section class="login-panel"><form class="login-card" id="login-form"><p class="eyebrow">Supabase administrator access</p><h2>Admin sign in</h2><p class="subtle">Sign in with the admin user registered in Supabase Auth.</p>${message ? `<div class="notice">${esc(message)}</div>` : ""}<label>Email<input name="email" type="email" placeholder="tega@spoon.hackathon" required></label><label>Password<input name="password" type="password" placeholder="••••••••" required></label><button class="primary" type="submit">Sign in</button>${cfg.demoMode ? `<div class="demo-note"><strong>Preview mode</strong><br>Use any email with password <code>admin</code>.</div>` : `<div class="demo-note"><strong>Protected by Supabase</strong><br>Only users listed in <code>admin_users</code> can open admin mode.</div>`}</form></section></main>`;
+  app.innerHTML = `<main class="login"><section class="login-art"><div class="brand"><img class="spoon-logo login-logo" src="https://spoonconsulting.com/wp-content/uploads/elementor/thumbs/Logo-Spoon-Spoon-Consulting-2024-scaled-rah72gsdflipzz9bau5ypzlaz4ldjbb0h0vj24z8x8.webp" alt="Spoon Consulting"></div><div><p class="eyebrow">Protected area</p><h1>Admin.<br><span style="color:#12aaa3">Reports.</span><br><span class="orange-text">Insights.</span></h1><p class="subtle login-copy">The mentor and jury forms are separated. Consolidated feedback and participant reports remain in the protected administrator area.</p></div><button class="secondary public-return" data-action="return-current">${returnLabel}</button></section><section class="login-panel"><form class="login-card" id="login-form"><p class="eyebrow">Administrator access</p><h2>Admin sign in</h2><p class="subtle">Sign in with an approved admin account.</p>${message ? `<div class="notice">${esc(message)}</div>` : ""}<label>Email<input name="email" type="email" placeholder="tega@spoon.hackathon" required></label><label>Password<input name="password" type="password" placeholder="••••••••" required></label><button class="primary" type="submit">Sign in</button>${cfg.demoMode ? `<div class="demo-note"><strong>Preview mode</strong><br>Use any email with password <code>admin</code>.</div>` : `<div class="demo-note"><strong>Protected admin area</strong><br>Only approved administrator accounts can open admin mode.</div>`}</form></section></main>`;
 }
 
 function mentorTabs() {
-  return `<div class="mentor-tabs" aria-label="Mentor workspaces">${state.mentors.map(name => `<button class="mentor-tab ${state.activeMentor === name ? "active" : ""}" data-mentor="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
+  return `<div class="mentor-tabs" aria-label="Mentor workspaces">${state.mentors.map(name => `<button type="button" class="mentor-tab ${state.activeMentor === name ? "active" : ""}" data-mentor="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
 }
 
 function juryTabs() {
-  return `<div class="mentor-tabs" aria-label="Jury workspaces">${state.juries.map(name => `<button class="mentor-tab ${state.activeJury === name ? "active" : ""}" data-jury="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
+  return `<div class="mentor-tabs" aria-label="Jury workspaces">${state.juries.map(name => `<button type="button" class="mentor-tab ${state.activeJury === name ? "active" : ""}" data-jury="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
 }
 
 function criteriaSelectView(criterion, value = "") {
@@ -1685,7 +1718,7 @@ function groupState(group) {
 }
 
 function mentorDashboard() {
-  shell(`<main class="page simple-page"><nav class="journey" aria-label="Review steps"><span class="active">1 <b>Mentor</b></span><i></i><span>2 <b>Choose group</b></span><i></i><span>3 <b>Submit review</b></span></nav><section class="mentor-choice"><p class="eyebrow orange-eyebrow">Start here</p><h1>Choose your mentor name</h1><p>Tap your name below. We’ll remember it on this device.</p>${mentorTabs()}</section><section class="group-heading"><div><span class="selected-mentor"><i>${state.activeMentor[0]}</i> Reviewing as <strong>${esc(state.activeMentor)}</strong></span><h2>Choose a group</h2></div><div class="status-key"><span><i class="new"></i>Not started</span><span><i class="started"></i>In progress</span><span><i class="complete"></i>Completed</span></div></section><section class="group-list">${state.data.groups.map(group => { const gs = groupState(group); return `<button class="group-row" data-group-review="${group.id}" data-resume-q="${gs.resume}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small>${group.participants.length} participants · ${gs.completed}/${state.data.questions.length} questions</small></span><span class="group-status ${gs.tone}"><i></i>${gs.label}<small>${gs.detail}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">In progress groups automatically resume at the first unanswered question. Your review saves securely to Supabase.</p></main>`);
+  shell(`<main class="page simple-page"><nav class="journey" aria-label="Review steps"><span class="active">1 <b>Mentor</b></span><i></i><span>2 <b>Choose group</b></span><i></i><span>3 <b>Submit review</b></span></nav><section class="mentor-choice"><p class="eyebrow orange-eyebrow">Start here</p><h1>Choose your mentor name</h1><p>Tap your name below. We’ll remember it on this device.</p>${mentorTabs()}</section><section class="group-heading"><div><span class="selected-mentor"><i>${state.activeMentor[0]}</i> Reviewing as <strong>${esc(state.activeMentor)}</strong></span><h2>Choose a group</h2></div><div class="status-key"><span><i class="new"></i>Not started</span><span><i class="started"></i>In progress</span><span><i class="complete"></i>Completed</span></div></section><section class="group-list">${state.data.groups.map(group => { const gs = groupState(group); return `<button class="group-row" data-group-review="${group.id}" data-resume-q="${gs.resume}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small>${group.participants.length} participants · ${gs.completed}/${state.data.questions.length} questions</small></span><span class="group-status ${gs.tone}"><i></i>${gs.label}<small>${gs.detail}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">In-progress groups automatically resume at the first unanswered question. Your review saves to the shared dashboard when connected.</p></main>`);
 }
 
 function openMiniProject() {
@@ -1874,14 +1907,25 @@ function buildMiniProjectSummary(group) {
 }
 
 function historyList() {
-  if (!state.changeHistory.length) return `<p class="subtle">No Supabase history yet. Changes will appear here after mentors save.</p>`;
-  return `<div class="mentor-inputs history-list">${state.changeHistory.slice(0, 12).map(item => `<div><span class="avatar">${esc((item.mentor_name || "?").slice(0, 1))}</span><strong>${esc(item.mentor_name || "System")}</strong><small>${esc(item.action)} ${esc(item.table_name)} · ${esc(item.group_name || "")}${item.question_position ? ` · Q${item.question_position}` : ""}<br>${new Date(item.changed_at).toLocaleString()}</small></div>`).join("")}</div>`;
+  if (!state.changeHistory.length) return `<p class="subtle">No recent changes yet. Changes will appear here after mentors save.</p>`;
+  const actionLabel = action => ({ INSERT: "Added", UPDATE: "Updated", DELETE: "Removed" }[String(action || "").toUpperCase()] || "Changed");
+  const areaLabel = tableName => ({
+    group_corrections: "question marks",
+    individual_remarks: "individual feedback",
+    mini_project_reviews: "mini-project review",
+    mini_project_assignments: "mini-project title",
+    newbie_photos: "participant photo",
+    ai_reports: "admin summary",
+    mentors: "mentor list",
+    juries: "jury list"
+  }[String(tableName || "")] || "review data");
+  return `<div class="mentor-inputs history-list">${state.changeHistory.slice(0, 12).map(item => `<div><span class="avatar">${esc((item.mentor_name || "?").slice(0, 1))}</span><strong>${esc(item.mentor_name || "System")}</strong><small>${esc(actionLabel(item.action))} ${esc(areaLabel(item.table_name))} · ${esc(item.group_name || "")}${item.question_position ? ` · Q${item.question_position}` : ""}<br>${new Date(item.changed_at).toLocaleString()}</small></div>`).join("")}</div>`;
 }
 
 function photoManagerView() {
   const participants = allParticipants();
   const uploaded = participants.filter(({ person }) => state.participantPhotos[person]).length;
-  return `<details class="card report-card photo-manager-tab"><summary><span><strong>Newbie photo upload</strong><small>Hidden admin tool · ${uploaded}/${participants.length} uploaded</small></span><span class="ai-badge">Open</span></summary><form id="photo-upload-form" class="photo-upload-form"><label>Upload photo folder or multiple photos<input name="photos" type="file" accept="image/*" multiple webkitdirectory directory></label><button class="primary" type="submit">Upload & match photos</button><p class="subtle">Name files like <code>Sollinselvan Curpen.jpg</code>. The app compresses them to display-size WebP files and stores random paths in Supabase.</p></form><div class="photo-admin-grid">${participants.map(({ group, person }) => `<div class="${state.participantPhotos[person] ? "has-photo" : ""}">${participantAvatar(person, "medium")}<strong>${esc(person)}</strong><small>${esc(group.name)} · ${state.participantPhotos[person] ? "Photo ready" : "No photo yet"}</small></div>`).join("")}</div></details>`;
+  return `<details class="card report-card photo-manager-tab"><summary><span><strong>Newbie photo upload</strong><small>Hidden admin tool · ${uploaded}/${participants.length} uploaded</small></span><span class="ai-badge">Open</span></summary><form id="photo-upload-form" class="photo-upload-form"><label>Upload photo folder or multiple photos<input name="photos" type="file" accept="image/*" multiple webkitdirectory directory></label><button class="primary" type="submit">Upload & match photos</button><p class="subtle">Name files like <code>Sollinselvan Curpen.jpg</code>. The app compresses photos to display size and stores them with private, random file names.</p></form><div class="photo-admin-grid">${participants.map(({ group, person }) => `<div class="${state.participantPhotos[person] ? "has-photo" : ""}">${participantAvatar(person, "medium")}<strong>${esc(person)}</strong><small>${esc(group.name)} · ${state.participantPhotos[person] ? "Photo ready" : "No photo yet"}</small></div>`).join("")}</div></details>`;
 }
 
 function adminDashboard(selectedMentor = "all") {
@@ -1928,7 +1972,7 @@ document.addEventListener("submit", async event => {
       await loadSharedData({ includeAdminData: true });
       return dashboard();
     } catch (error) {
-      return loginView(error.message || "Admin sign in failed.");
+      return loginView(friendlyError(error, "Admin sign in failed. Check your email/password and try again."));
     }
   }
 
@@ -1939,7 +1983,7 @@ document.addEventListener("submit", async event => {
       showToast("✓ Mentor added");
       adminDashboard(lastAdminMentor);
     } catch (error) {
-      showToast(error.message || "Could not add mentor.");
+      showToast(friendlyError(error, "Could not add mentor. Try again."));
     }
   }
 
@@ -1950,7 +1994,7 @@ document.addEventListener("submit", async event => {
       showToast("✓ Jury added");
       adminDashboard(lastAdminMentor);
     } catch (error) {
-      showToast(error.message || "Could not add jury.");
+      showToast(friendlyError(error, "Could not add jury. Try again."));
     }
   }
 
@@ -1961,7 +2005,7 @@ document.addEventListener("submit", async event => {
       showToast("✓ Jury renamed");
       adminDashboard(lastAdminMentor);
     } catch (error) {
-      showToast(error.message || "Could not rename jury.");
+      showToast(friendlyError(error, "Could not rename jury. Try again."));
     }
   }
 
@@ -1969,11 +2013,11 @@ document.addEventListener("submit", async event => {
     const data = Object.fromEntries(new FormData(event.target));
     try {
       await saveMiniProjectAssignmentsAsAdmin(data);
-      showToast(remoteEnabled() ? "✓ Group titles updated in Supabase" : "✓ Group titles updated locally");
+      showToast(updatedOnlineMessage("Group titles"));
       adminDashboard(lastAdminMentor);
     } catch (error) {
       console.error("Mini-project title save failed", error);
-      showToast(error.message ? `Title save failed: ${error.message}` : "Could not save group titles.");
+      showToast(friendlyError(error, "Could not save group titles. Try again."));
     }
   }
 
@@ -1995,7 +2039,7 @@ document.addEventListener("submit", async event => {
       adminTablePage();
     } catch (error) {
       console.error("Admin jury feedback update failed", error);
-      showToast(error.message ? `Update failed: ${error.message}` : "Could not update jury feedback.");
+      showToast(friendlyError(error, "Could not update jury feedback. Try again."));
     }
   }
 
@@ -2017,7 +2061,7 @@ document.addEventListener("submit", async event => {
       adminDashboard(lastAdminMentor);
     } catch (error) {
       console.error("Photo upload failed", error);
-      showToast(error.message ? `Photo upload failed: ${error.message}` : "Photo upload failed.");
+      showToast(friendlyError(error, "Photo upload failed. Check the files and try again."));
     }
   }
 
@@ -2064,12 +2108,12 @@ document.addEventListener("submit", async event => {
 
     try {
       await persistReview(group, qid, data);
-      showToast(remoteEnabled() ? "✓ Review saved to Supabase" : "✓ Review saved locally");
+      showToast(savedOnlineMessage("Review"));
     } catch (error) {
       console.error("Save failed", error);
       state.syncStatus = "error";
       save();
-      showToast(error.message ? `Supabase sync failed: ${error.message}` : "Saved locally, but Supabase sync failed.");
+      showToast(friendlyError(error, localSyncIssueMessage("update the shared dashboard")));
     }
 
     if (data.destination === "dashboard" || qid === state.data.questions.length) mentorDashboard();
@@ -2151,16 +2195,20 @@ document.addEventListener("click", async event => {
     return;
   }
   if (button.dataset.mentor) {
+    if (state.activeMentor === button.dataset.mentor && state.session?.role === "mentor") return;
     state.activeMentor = button.dataset.mentor;
     state.session.name = state.activeMentor;
     save();
     mentorDashboard();
   }
   if (button.dataset.jury) {
-    state.activeJury = button.dataset.jury;
-    state.session = { name: state.activeJury, role: "jury" };
-    save();
+    if (state.activeJury !== button.dataset.jury || state.session?.role !== "jury") {
+      state.activeJury = button.dataset.jury;
+      state.session = { name: state.activeJury, role: "jury" };
+      save();
+    }
     miniProjectDashboard();
+    return;
   }
   if (button.dataset.miniGroup) {
     miniProjectReviewView(button.dataset.miniGroup);
@@ -2188,7 +2236,7 @@ document.addEventListener("click", async event => {
       adminDashboard(lastAdminMentor);
     } catch (error) {
       console.error("Delete correction failed", error);
-      showToast(error.message ? `Remove failed: ${error.message}` : "Could not remove correction.");
+      showToast(friendlyError(error, "Could not remove correction. Try again."));
     }
   }
   if (button.dataset.deleteMentor) {
@@ -2201,7 +2249,7 @@ document.addEventListener("click", async event => {
       showToast("✓ Mentor deleted");
       adminDashboard(lastAdminMentor);
     } catch (error) {
-      showToast(error.message || "Could not delete mentor.");
+      showToast(friendlyError(error, "Could not delete mentor. Try again."));
     }
   }
   if (button.dataset.deleteJury) {
@@ -2214,7 +2262,7 @@ document.addEventListener("click", async event => {
       showToast("✓ Jury deleted");
       adminDashboard(lastAdminMentor);
     } catch (error) {
-      showToast(error.message || "Could not delete jury.");
+      showToast(friendlyError(error, "Could not delete jury. Try again."));
     }
   }
   if (button.dataset.deleteMiniReview) {
@@ -2229,7 +2277,7 @@ document.addEventListener("click", async event => {
       refreshAdminMiniProjectView();
     } catch (error) {
       console.error("Delete jury feedback failed", error);
-      showToast(error.message ? `Delete failed: ${error.message}` : "Could not delete jury feedback.");
+      showToast(friendlyError(error, "Could not delete jury feedback. Try again."));
     }
   }
   if (button.dataset.clearMiniScores) {
@@ -2248,7 +2296,7 @@ document.addEventListener("click", async event => {
       refreshAdminMiniProjectView();
     } catch (error) {
       console.error("Clear jury points failed", error);
-      showToast(error.message ? `Clear failed: ${error.message}` : "Could not clear jury points.");
+      showToast(friendlyError(error, "Could not clear jury points. Try again."));
     }
   }
   if (button.dataset.action === "clear-history") {
@@ -2261,7 +2309,7 @@ document.addEventListener("click", async event => {
       adminDashboard(lastAdminMentor);
     } catch (error) {
       console.error("Clear history failed", error);
-      showToast(error.message ? `Clear failed: ${error.message}` : "Could not clear recent changes.");
+      showToast(friendlyError(error, "Could not clear recent changes. Try again."));
     }
   }
   if (button.dataset.action === "generate-reports") {
@@ -2274,10 +2322,10 @@ document.addEventListener("click", async event => {
 
     try {
       await persistReports();
-      showToast(remoteEnabled() ? "✓ Reports saved to Supabase" : "✓ Reports generated locally");
+      showToast(remoteEnabled() ? "✓ Reports saved online" : "✓ Reports generated on this device");
     } catch (error) {
       console.error("Report save failed", error);
-      showToast("Reports generated locally, but Supabase sync failed.");
+      showToast(friendlyError(error, localSyncIssueMessage("save the reports online")));
     }
 
     adminDashboard(lastAdminMentor);
