@@ -172,6 +172,25 @@ textarea.compact { min-height:75px; }
 .subtle-link { border:0; background:transparent; color:#77879a; font-size:12px; font-weight:700; padding:6px 4px; }
 .subtle-link:hover { color:#b74125; text-decoration:underline; }
 .summary-text { font-size:15px; line-height:1.8; color:#506078; padding:16px; background:#f4fafb; border-radius:10px; border-left:3px solid var(--green); }
+.mini-breakdown-empty { margin:0; }
+.mini-jury-breakdown { display:grid; gap:10px; padding:14px; border:1px solid #d8e5ea; border-radius:16px; background:#f7fbfc; }
+.mini-jury-breakdown.compact { padding:10px; gap:8px; }
+.mini-jury-breakdown-head { display:flex; justify-content:space-between; align-items:center; gap:12px; color:var(--ink); }
+.mini-jury-breakdown-head span { color:#087c79; font-size:12px; font-weight:800; white-space:nowrap; }
+.mini-jury-row { display:grid; gap:8px; padding:11px; border:1px solid #dce7ec; border-radius:14px; background:white; }
+.mini-jury-top { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+.mini-jury-top strong { color:var(--ink); }
+.mini-jury-top small { display:block; color:#087c79; font-weight:800; margin-top:2px; }
+.mini-jury-actions { display:flex; justify-content:flex-end; gap:7px; flex-wrap:wrap; }
+.mini-jury-actions .secondary, .mini-jury-actions .danger-mini { padding:6px 9px; font-size:11px; }
+.mini-jury-row p { margin:0; color:#506078; line-height:1.55; }
+.mini-jury-row ul { margin:0; padding-left:18px; color:#607187; font-size:12px; line-height:1.5; }
+.mini-jury-row li + li { margin-top:4px; }
+.mini-jury-row > small { color:#8a98a8; }
+.admin-info-table .mini-jury-breakdown { min-width:310px; }
+.admin-info-table .mini-jury-breakdown-head { display:grid; gap:2px; }
+.admin-info-table .mini-jury-row { padding:9px; }
+.admin-info-table .mini-jury-actions { justify-content:flex-start; }
 .report-card h3 { margin:25px 0 12px; }
 .individual-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:11px; }
 .question-summary-list { display:grid; gap:9px; max-height:360px; overflow:auto; padding-right:4px; }
@@ -309,6 +328,7 @@ summary { cursor:pointer; font-weight:600; color:#087c79; }
 .jury-note-panel.important { border-color:#ffc18e; background:#fff8f2; }
 .jury-note-panel > div { display:grid; gap:3px; }
 .jury-note-panel strong { color:var(--ink); }
+.jury-note-panel .note-clear { justify-self:start; padding:3px 0; }
 .jury-note-panel em { display:inline-block; margin-left:6px; padding:3px 7px; border-radius:999px; background:#ff8642; color:white; font-size:10px; font-style:normal; vertical-align:middle; }
 .jury-note-panel small { color:var(--muted); line-height:1.45; }
 .jury-note-panel textarea { min-height:96px; background:rgba(255,255,255,.94); resize:vertical; border-radius:15px; box-shadow:inset 0 1px 0 rgba(3,14,29,.03); }

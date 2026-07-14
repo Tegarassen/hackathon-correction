@@ -1423,6 +1423,11 @@ async function deleteMiniReviewAsAdmin(groupId, juryName) {
   if (error) throw error;
 }
 
+function refreshAdminMiniProjectView() {
+  if (location.hash === "#admin-table") adminTablePage();
+  else adminDashboard(lastAdminMentor);
+}
+
 function shell(content) {
   const { name, role } = state.session;
   const accountControls = role === "admin"
@@ -1448,7 +1453,7 @@ function criteriaSelectView(criterion, value = "") {
   const selected = value === "" || value === null || value === undefined ? "" : Number(value);
   const values = Array.from({ length: Math.round(criterion.max * 2) + 1 }, (_, index) => index / 2);
   const fullHint = [criterion.prompt, ...(criterion.questions || [])].join(" ");
-  return `<div class="criterion-card ${selected !== "" ? "scored" : ""}" data-criteria-max="${criterion.max}" title="${esc(fullHint)}"><div class="criterion-top"><div><strong>${esc(criterion.label)}</strong><small>${esc(criterion.prompt)}</small></div><span>${selected !== "" ? `${selected}/${criterion.max}` : `/${criterion.max}`}</span></div><input type="hidden" name="${esc(criterion.key)}" value="${selected !== "" ? esc(selected) : ""}" required data-criteria-input><div class="criteria-buttons">${values.map(item => `<button type="button" class="criteria-score ${selected === item ? "active" : ""}" data-criteria-score="${item}">${item}</button>`).join("")}</div><details class="criteria-questions"><summary>Judging questions</summary><ul>${(criterion.questions || []).map(question => `<li>${esc(question)}</li>`).join("")}</ul></details></div>`;
+  return `<div class="criterion-card ${selected !== "" ? "scored" : ""}" data-criteria-max="${criterion.max}" title="${esc(fullHint)}"><div class="criterion-top"><div><strong>${esc(criterion.label)}</strong><small>${esc(criterion.prompt)}</small></div><span>${selected !== "" ? `${selected}/${criterion.max}` : `/${criterion.max}`}</span></div><input type="hidden" name="${esc(criterion.key)}" value="${selected !== "" ? esc(selected) : ""}" data-criteria-input><div class="criteria-buttons">${values.map(item => `<button type="button" class="criteria-score ${selected === item ? "active" : ""}" data-criteria-score="${item}">${item}</button>`).join("")}</div><details class="criteria-questions"><summary>Judging questions</summary><ul>${(criterion.questions || []).map(question => `<li>${esc(question)}</li>`).join("")}</ul></details></div>`;
 }
 
 function answerGuideView(question) {
@@ -1539,7 +1544,7 @@ function miniProjectDashboard() {
 function miniProjectReviewView(groupId) {
   const group = groupById(groupId);
   const review = state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)] || { scores: {}, individualNotes: {} };
-  shell(`<main class="page guided-review mini-review-page"><nav class="journey" aria-label="Mini project steps"><span class="done">✓ <b>${esc(state.activeJury)}</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Score</b></span></nav><div class="review-toolbar mini-toolbar"><button class="back-link" data-action="mini-dashboard">← Groups</button><div class="question-progress"><span>${miniProjectScore(review)}/${miniProjectTotal} selected</span><div><i style="width:${miniProjectScore(review) / miniProjectTotal * 100}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved before" : "Not scored yet"}</span></div><section class="workflow mini-workflow"><form id="mini-project-form" data-group="${group.id}"><div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-score-head"><div><p class="eyebrow">Mini project assessment</p><h1>${esc(group.name)}</h1><p class="subtle">Choose each criteria score, then add group and individual notes below.</p></div><strong>${esc(state.activeJury)}</strong></div><div class="criteria-grid">${miniProjectCriteria.map(criterion => criteriaSelectView(criterion, review.scores?.[criterion.key])).join("")}</div></article><aside class="card mini-notes-card"><div class="mini-score-head compact"><div><p class="eyebrow orange-eyebrow">Feedback</p><h2>Group & individual notes</h2><p class="subtle">Notes are optional, but this is the main space. Expand any box for longer feedback.</p></div></div><div class="jury-note-panel important"><div><strong>Group note <em>Important</em></strong><small>Capture the reason behind the score.</small></div><textarea name="groupNote" placeholder="Strengths, weaknesses, what affected the score…">${esc(review.groupNote)}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes <em>Important</em></strong><small>Add participant-specific observations if useful.</small></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="miniNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
+  shell(`<main class="page guided-review mini-review-page"><nav class="journey" aria-label="Mini project steps"><span class="done">✓ <b>${esc(state.activeJury)}</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Score</b></span></nav><div class="review-toolbar mini-toolbar"><button class="back-link" data-action="mini-dashboard">← Groups</button><div class="question-progress"><span>${miniProjectScore(review)}/${miniProjectTotal} selected</span><div><i style="width:${miniProjectScore(review) / miniProjectTotal * 100}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved before" : "Not scored yet"}</span></div><section class="workflow mini-workflow"><form id="mini-project-form" data-group="${group.id}"><div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-score-head"><div><p class="eyebrow">Mini project assessment</p><h1>${esc(group.name)}</h1><p class="subtle">Choose each criteria score, then add group and individual notes below. Tap a selected score again to unselect it.</p></div><strong>${esc(state.activeJury)}</strong></div><div class="criteria-grid">${miniProjectCriteria.map(criterion => criteriaSelectView(criterion, review.scores?.[criterion.key])).join("")}</div></article><aside class="card mini-notes-card"><div class="mini-score-head compact"><div><p class="eyebrow orange-eyebrow">Feedback</p><h2>Group & individual notes</h2><p class="subtle">Notes are optional, but this is the main space. Expand any box for longer feedback.</p></div></div><div class="jury-note-panel important"><div><strong>Group note <em>Important</em></strong><small>Capture the reason behind the score.</small><button class="subtle-link note-clear" type="button" data-clear-note="group">Clear group note</button></div><textarea name="groupNote" placeholder="Strengths, weaknesses, what affected the score…">${esc(review.groupNote)}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes <em>Important</em></strong><small>Add participant-specific observations if useful.</small><button class="subtle-link note-clear" type="button" data-clear-note="individual">Clear individual notes</button></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="miniNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
 }
 
 function correctionView(groupId, qid = 1) {
@@ -1628,7 +1633,18 @@ function adminFullInfoTableView() {
   }).join("");
   const individualSummary = group => group.participants.map(person => `<div class="admin-person-row">${participantNameBlock(person)}<p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("");
 
-  return `<article class="card report-card admin-full-table-card"><div class="report-heading"><div><p class="eyebrow">Everything assembled</p><h2>Group + individual review table</h2></div><span class="ai-badge">Admin only</span></div><div class="admin-table-wrap"><table class="admin-info-table"><thead><tr><th>Group</th><th>Score</th><th>Group notes</th><th>Questions</th><th>Individual feedback</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${esc(row.group.name)}</strong><small>${row.group.participants.length} participants</small></td><td><b>${row.total}/${row.max}</b><small>Hackathon ${row.hackathon}/${row.hackathonMax}</small><small>Mini ${row.mini}/${row.miniMax} · ${row.juryCount} jury</small></td><td><p>${esc(state.reports[`group|${row.group.id}`] || buildGroupSummary(row.group))}</p><p>${esc(buildMiniProjectSummary(row.group))}</p></td><td><div class="admin-question-chips">${questionSummary(row.group)}</div></td><td><div class="admin-person-list">${individualSummary(row.group)}</div></td></tr>`).join("")}</tbody></table></div></article>`;
+  return `<article class="card report-card admin-full-table-card"><div class="report-heading"><div><p class="eyebrow">Everything assembled</p><h2>Group + individual review table</h2></div><span class="ai-badge">Admin only</span></div><div class="admin-table-wrap"><table class="admin-info-table"><thead><tr><th>Group</th><th>Score</th><th>Group notes</th><th>Questions</th><th>Individual feedback</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${esc(row.group.name)}</strong><small>${row.group.participants.length} participants</small></td><td><b>${row.total}/${row.max}</b><small>Hackathon ${row.hackathon}/${row.hackathonMax}</small><small>Mini ${row.mini}/${row.miniMax} · ${row.juryCount} jury</small></td><td><p>${esc(state.reports[`group|${row.group.id}`] || buildGroupSummary(row.group))}</p>${miniProjectBreakdownView(row.group, { compact: true })}</td><td><div class="admin-question-chips">${questionSummary(row.group)}</div></td><td><div class="admin-person-list">${individualSummary(row.group)}</div></td></tr>`).join("")}</tbody></table></div></article>`;
+}
+
+function miniProjectBreakdownView(group, options = {}) {
+  const reviews = miniReviewsForGroup(group).sort((a, b) => String(a.juryName).localeCompare(String(b.juryName)));
+  if (!reviews.length) return `<p class="summary-text mini-breakdown-empty">Mini project has not been scored yet.</p>`;
+
+  const compactClass = options.compact ? " compact" : "";
+  return `<div class="mini-jury-breakdown${compactClass}"><div class="mini-jury-breakdown-head"><strong>Mini-project jury detail</strong><span>${miniProjectAverage(group)}/${miniProjectTotal} average · ${reviews.length} jury</span></div>${reviews.map(review => {
+    const individualNotes = Object.entries(review.individualNotes || {}).filter(([, note]) => String(note || "").trim());
+    return `<div class="mini-jury-row"><div class="mini-jury-top"><div><strong>${esc(review.juryName || "Jury")}</strong><small>${miniProjectScore(review)}/${miniProjectTotal} points</small></div>${state.session?.role === "admin" ? `<div class="mini-jury-actions"><button class="secondary" data-action="admin-table" type="button">Edit</button><button class="secondary" type="button" data-clear-mini-scores="${esc(review.groupId)}|${esc(review.juryName)}">Clear points</button><button class="danger-mini" type="button" data-delete-mini-review="${esc(review.groupId)}|${esc(review.juryName)}">Delete</button></div>` : ""}</div><p>${esc(review.groupNote || "No group note from this jury.")}</p>${individualNotes.length ? `<ul>${individualNotes.map(([person, note]) => `<li><b>${esc(person)}:</b> ${esc(note)}</li>`).join("")}</ul>` : `<small>No individual notes from this jury.</small>`}</div>`;
+  }).join("")}</div>`;
 }
 
 function adminMiniReviewEditorView() {
@@ -1651,7 +1667,7 @@ function juryAdminView() {
 }
 
 function adminDetailedGroupCardsView() {
-  return state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">${groupScore(group) + miniProjectAverage(group)}/${knownTotalMarks() + miniProjectTotal} total</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Mini project</h3><p class="summary-text">${esc(buildMiniProjectSummary(group))}</p><h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("");
+  return state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">${groupScore(group) + miniProjectAverage(group)}/${knownTotalMarks() + miniProjectTotal} total</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Mini project</h3>${miniProjectBreakdownView(group)}<h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("");
 }
 
 function adminTablePage() {
@@ -1674,8 +1690,10 @@ function buildPersonFeedback(person) {
 function buildMiniProjectSummary(group) {
   const reviews = miniReviewsForGroup(group);
   if (!reviews.length) return "Mini project has not been scored yet.";
-  const notes = reviews.map(review => review.groupNote).filter(Boolean);
-  return `Average mini-project score: ${miniProjectAverage(group)}/${miniProjectTotal} from ${reviews.length} jury member(s). ${notes.length ? `Jury notes: ${notes.slice(0, 4).join(" · ")}` : "No group notes yet."}`;
+  const juryDetails = reviews
+    .sort((a, b) => String(a.juryName).localeCompare(String(b.juryName)))
+    .map(review => `${review.juryName || "Jury"}: ${miniProjectScore(review)}/${miniProjectTotal}${review.groupNote ? ` — ${review.groupNote}` : ""}`);
+  return `Average mini-project score: ${miniProjectAverage(group)}/${miniProjectTotal} from ${reviews.length} jury member(s). ${juryDetails.join(" · ")}`;
 }
 
 function historyList() {
@@ -1932,11 +1950,26 @@ document.addEventListener("click", async event => {
     const card = button.closest(".criterion-card");
     const input = card?.querySelector("[data-criteria-input]");
     if (!card || !input) return;
-    input.value = button.dataset.criteriaScore;
-    card.classList.add("scored");
-    card.querySelector(".criterion-top span").textContent = `${button.dataset.criteriaScore}/${card.dataset.criteriaMax}`;
-    card.querySelectorAll(".criteria-score").forEach(item => item.classList.toggle("active", item === button));
+    const wasActive = button.classList.contains("active");
+    input.value = wasActive ? "" : button.dataset.criteriaScore;
+    card.classList.toggle("scored", !wasActive);
+    card.querySelector(".criterion-top span").textContent = wasActive ? `/${card.dataset.criteriaMax}` : `${button.dataset.criteriaScore}/${card.dataset.criteriaMax}`;
+    card.querySelectorAll(".criteria-score").forEach(item => item.classList.toggle("active", !wasActive && item === button));
     queueMiniProjectAutosave(button.closest("#mini-project-form"), 250);
+    return;
+  }
+  if (button.dataset.clearNote) {
+    const form = button.closest("#mini-project-form");
+    if (!form) return;
+    if (button.dataset.clearNote === "group") {
+      const note = form.querySelector('textarea[name="groupNote"]');
+      if (note) note.value = "";
+    }
+    if (button.dataset.clearNote === "individual") {
+      form.querySelectorAll('textarea[name^="miniNote::"]').forEach(note => { note.value = ""; });
+    }
+    queueMiniProjectAutosave(form, 250);
+    showToast(button.dataset.clearNote === "group" ? "Group note cleared" : "Individual notes cleared");
     return;
   }
   if (button.dataset.mentor) {
@@ -2015,7 +2048,7 @@ document.addEventListener("click", async event => {
     try {
       await deleteMiniReviewAsAdmin(Number(groupId), juryName);
       showToast("✓ Jury feedback deleted");
-      adminTablePage();
+      refreshAdminMiniProjectView();
     } catch (error) {
       console.error("Delete jury feedback failed", error);
       showToast(error.message ? `Delete failed: ${error.message}` : "Could not delete jury feedback.");
@@ -2034,7 +2067,7 @@ document.addEventListener("click", async event => {
         scores: Object.fromEntries(miniProjectCriteria.map(criterion => [criterion.key, 0]))
       });
       showToast("✓ Jury points cleared");
-      adminTablePage();
+      refreshAdminMiniProjectView();
     } catch (error) {
       console.error("Clear jury points failed", error);
       showToast(error.message ? `Clear failed: ${error.message}` : "Could not clear jury points.");
