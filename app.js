@@ -6,16 +6,37 @@ const supabaseClient = !cfg.demoMode && cfg.supabaseUrl && cfg.supabaseAnonKey &
 
 const defaultMentors = ["Chevish", "Mehreen", "Pratish", "Vinasha", "Diraj", "Ayush", "Ijaaz", "Kevan", "Keshav", "Tega", "Ashutosh", "Semarchy"];
 const defaultJuries = ["Varun", "Naushine", "Suraj", "Urvashi", "Farzanah", "Irfaan", "Diraj", "Kevan", "Keshav", "Tega", "Ashutosh", "Semarchy", "Noorvesh"];
+const miniProjectTopics = [
+  {
+    key: "smart_budget_moris",
+    title: "Smart Budget Moris",
+    subtitle: "Making the National Budget Clear for Every Citizen",
+    brief: "Design and implement an app that helps Mauritian citizens understand the National Budget by simplifying public spending, explaining key government measures, and showing how budget decisions affect households, students, workers, businesses, and vulnerable communities in daily life.",
+    bonus: "Use AI to explain budget measures in simple language and show how they may affect different citizen profiles such as students, parents, workers, pensioners, and small business owners."
+  },
+  {
+    key: "health_alert_mauritius",
+    title: "Health Alert Mauritius",
+    subtitle: "Early Awareness for a Safer Nation",
+    brief: "Design and implement an app that informs Mauritians about public health risks such as dengue, flu, chikungunya, and other outbreaks, while sharing prevention tips, nearby health resources, symptoms to watch for, and real-time awareness alerts to help citizens stay safe.",
+    bonus: "Use AI to guide users based on symptoms, explain possible health risks in simple terms, and recommend safe next steps such as prevention, monitoring, or seeking medical help."
+  },
+  {
+    key: "water_wise_moris",
+    title: "Water Wise Moris",
+    subtitle: "Helping Citizens Save, Monitor, and Prepare",
+    brief: "Design and implement an app that helps citizens in Mauritius monitor water availability, understand reservoir levels, receive water cut alerts, learn water-saving habits, and prepare households during shortages or drought periods.",
+    bonus: "Use AI to analyse household water habits and generate personalised water-saving advice during shortages, droughts, or scheduled water cuts."
+  }
+];
 const miniProjectCriteria = [
-  { key: "usability", label: "Usability", max: 2, prompt: "Easy for citizens of different ages to navigate and understand.", questions: ["Can a non-technical citizen use it without help?", "Are labels, menus, and next steps obvious?", "Is the main action visible within a few seconds?", "Would an elderly or first-time user feel lost?"] },
-  { key: "content", label: "Content", max: 3, prompt: "Information is accurate, simplified, relevant, and useful for citizens.", questions: ["Is the information simplified without becoming misleading?", "Does it focus on what citizens actually need to know?", "Is the message clear, useful, and relevant to the chosen theme?", "Can the team explain where the data/content came from?", "Does it avoid jargon or explain jargon clearly?"] },
-  { key: "interactivity", label: "Interactivity", max: 3, prompt: "Users can explore information, compare options, or understand real-life impact.", questions: ["Can users explore, filter, or personalize information?", "Can they compare options, services, areas, categories, or scenarios?", "Can citizens understand how the topic affects them personally?", "Does interaction reveal useful insight, not just animation?", "Is feedback immediate after a click or selection?"] },
-  { key: "design", label: "Design", max: 2, prompt: "Visually clear, professional, and consistent.", questions: ["Is the interface clean and consistent?", "Are charts/cards readable at a glance?", "Are colors and spacing professional?", "Does the visual hierarchy guide the eye?"] },
-  { key: "performance", label: "Performance", max: 2, prompt: "Loads quickly and works well on desktop and mobile.", questions: ["Does it load quickly during the demo?", "Does it work on mobile and desktop layouts?", "Are buttons and text usable on a phone?", "Does anything freeze, jump, or break during use?"] },
-  { key: "innovation", label: "Innovation", max: 2, prompt: "Makes complex public information creative and accessible.", questions: ["Is the idea fresh or memorable?", "Does it make complex information easier to understand?", "Is there a creative metaphor, journey, or visualization?", "Would citizens remember this experience after the demo?"] },
-  { key: "collaboration", label: "Collaboration", max: 2, prompt: "Effective collaboration tools and practices were used.", questions: ["Can the team explain who did what?", "Did they use clear workflow/versioning practices?", "Did the demo feel like a team effort?", "Did they integrate work smoothly rather than stitching pieces last minute?"] },
-  { key: "backend", label: "BackEnd", max: 2, prompt: "Backend stores, manages, and serves the app data.", questions: ["Is data stored outside static code?", "Can the app manage or serve its data reliably?", "Is the backend structure understandable?", "Could the data be updated after the hackathon?"] },
-  { key: "ai_bonus", label: "Bonus: AI", max: 2, prompt: "Meaningful AI integration that improves the experience.", questions: ["Does AI add real value, not just decoration?", "Is the AI output useful and understandable?", "Does it help citizens summarize, ask questions, or explore?", "Is the AI used responsibly with clear limits?"] }
+  { key: "usability_design", legacyKeys: ["usability", "design"], label: "Usability & Design", max: 4, prompt: "Easy to use, visually clear, and comfortable for citizens of different ages.", questions: ["Can a non-technical citizen understand what to do within a few seconds?", "Are navigation, labels, buttons, and next steps obvious?", "Is the interface clean, consistent, and readable on laptop and mobile?", "Does the visual hierarchy guide the user to the most important information?", "Would an elderly person or first-time user feel confident using it without help?"] },
+  { key: "content", label: "Content & Citizen Value", max: 3, prompt: "Information is accurate, simplified, relevant, and useful for citizens.", questions: ["Is the information simplified without becoming misleading?", "Does it focus on what citizens actually need to know or decide?", "Is the message clear, useful, and relevant to the chosen theme?", "Can the team explain where the data/content came from?", "Does it avoid jargon, or explain technical terms in plain language?"] },
+  { key: "interactivity_performance", legacyKeys: ["interactivity", "performance"], label: "Interactivity & Performance", max: 5, prompt: "The app feels responsive and lets citizens explore, compare, or understand impact.", questions: ["Can users explore, filter, search, compare, or personalize information?", "Does each interaction give clear and immediate feedback?", "Does the app help citizens understand how the topic affects them personally?", "Does it load quickly and remain smooth during the demo?", "Does it work well on both desktop and mobile without broken layouts or freezes?"] },
+  { key: "innovation", label: "Innovation", max: 2, prompt: "The idea presents public information in a creative, memorable, or unusually accessible way.", questions: ["Is the concept fresh, memorable, or different from a basic information page?", "Does it make a complex topic easier to understand?", "Is there a creative journey, visualization, metaphor, interaction, or storytelling approach?", "Would citizens remember this experience after the demo?"] },
+  { key: "collaboration", label: "Collaboration", max: 2, prompt: "The team worked effectively and combined their work into one coherent product.", questions: ["Can the team clearly explain who contributed what?", "Did they use sensible workflow, planning, versioning, or task-sharing practices?", "Does the final product feel integrated rather than stitched together last minute?", "Did the demo show shared ownership and good communication?"] },
+  { key: "backend", label: "BackEnd", max: 2, prompt: "Backend stores, manages, protects, and serves useful app data.", questions: ["Is important data stored outside hard-coded static content?", "Can the app create, read, update, or serve data reliably?", "Is the backend structure understandable and appropriate for the project?", "Could the data be maintained or updated after the hackathon?"] },
+  { key: "ai_bonus", label: "Bonus: AI", max: 2, prompt: "AI is used meaningfully to improve the citizen experience.", questions: ["Does AI add real value instead of being decorative?", "Does it help users summarize, ask questions, discover insights, or make better decisions?", "Are AI outputs understandable, useful, and connected to the app goal?", "Is the AI use responsible, with sensible limits or clear expectations?"] }
 ];
 const miniProjectTotal = miniProjectCriteria.reduce((sum, item) => sum + item.max, 0);
 const seed = {
@@ -54,6 +75,7 @@ state = {
   groupCorrections: state.groupCorrections || {},
   individualRemarks: state.individualRemarks || {},
   miniProjectReviews: state.miniProjectReviews || {},
+  miniProjectAssignments: state.miniProjectAssignments || {},
   participantPhotos: state.participantPhotos || {},
   photoUrls: state.photoUrls || {},
   reports: state.reports || {},
@@ -76,6 +98,10 @@ const saveLocal = () => localStorage.setItem("spoon-state-v2", JSON.stringify(st
 const save = saveLocal;
 const esc = (value = "") => String(value).replace(/[&<>'"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
 const groupById = id => state.data.groups.find(group => group.id === Number(id));
+const topicByKey = key => miniProjectTopics.find(topic => topic.key === key);
+const topicFullTitle = topic => topic ? `${topic.title}: ${topic.subtitle}` : "";
+const assignmentForGroup = group => state.miniProjectAssignments?.[String(group?.id)] || null;
+const topicForGroup = group => topicByKey(assignmentForGroup(group)?.topicKey);
 const remoteEnabled = () => Boolean(supabaseClient);
 const adminAuthEnabled = () => remoteEnabled() && !cfg.demoMode;
 const knownTotalMarks = () => state.data.questions.reduce((sum, q) => sum + (Number(q.maxMarks) || 0), 0);
@@ -87,6 +113,18 @@ const normalizeMark = (mark, max) => {
   const total = Number(max);
   if (Number.isFinite(total) && total >= 0) return Math.min(safeValue, total);
   return safeValue;
+};
+const hasMarkValue = value => value !== "" && value !== null && value !== undefined && Number.isFinite(Number(value));
+const miniCriterionScore = (scores = {}, criterion) => {
+  if (hasMarkValue(scores?.[criterion.key])) return normalizeMark(scores[criterion.key], criterion.max);
+  if (!criterion.legacyKeys?.length) return null;
+  let hasLegacyScore = false;
+  const legacyTotal = criterion.legacyKeys.reduce((sum, key) => {
+    if (!hasMarkValue(scores?.[key])) return sum;
+    hasLegacyScore = true;
+    return sum + Number(scores[key]);
+  }, 0);
+  return hasLegacyScore ? normalizeMark(legacyTotal, criterion.max) : null;
 };
 const markStatus = (mark, max) => {
   const value = normalizeMark(mark, max);
@@ -103,7 +141,7 @@ const groupScore = group => state.data.questions.reduce((sum, question) => {
 const hackathonScoreboard = () => state.data.groups
   .map(group => ({ group, score: groupScore(group), max: knownTotalMarks() }))
   .sort((a, b) => b.score - a.score);
-const miniProjectScore = review => miniProjectCriteria.reduce((sum, criterion) => sum + (normalizeMark(review?.scores?.[criterion.key], criterion.max) || 0), 0);
+const miniProjectScore = review => miniProjectCriteria.reduce((sum, criterion) => sum + (miniCriterionScore(review?.scores, criterion) || 0), 0);
 const miniReviewsForGroup = group => Object.values(state.miniProjectReviews).filter(review => Number(review.groupId) === Number(group.id));
 const miniProjectAverage = group => {
   const reviews = miniReviewsForGroup(group);
@@ -773,6 +811,23 @@ function removeMiniProjectReviewRow(row) {
   delete state.miniProjectReviews[miniReviewKey(row.group_id, row.jury_name)];
 }
 
+function applyMiniProjectAssignmentRow(row) {
+  if (!row) return;
+  const topic = topicByKey(row.topic_key);
+  if (!topic) return;
+  state.miniProjectAssignments[String(row.group_id)] = {
+    groupId: Number(row.group_id),
+    groupName: row.group_name || `Group ${row.group_id}`,
+    topicKey: row.topic_key,
+    updatedAt: row.updated_at
+  };
+}
+
+function removeMiniProjectAssignmentRow(row) {
+  if (!row) return;
+  delete state.miniProjectAssignments[String(row.group_id)];
+}
+
 function applyReportRow(row) {
   if (!row) return;
   state.reports[row.report_key] = row.content || "";
@@ -974,9 +1029,10 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, juriesResult, corrections, remarks, miniReviews, photoRecords, reports, history] = await Promise.all([
+    const [mentorsResult, juriesResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       supabaseClient.from("juries").select("*").order("name", { ascending: true }),
+      supabaseClient.from("mini_project_assignments").select("*").order("group_id", { ascending: true }),
       supabaseClient.from("group_corrections").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("individual_remarks").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("mini_project_reviews").select("*").order("updated_at", { ascending: false }),
@@ -988,6 +1044,7 @@ async function loadSharedData(options = {}) {
     for (const result of [corrections, remarks, reports, history]) {
       if (result.error) throw result.error;
     }
+    if (projectAssignments.error) console.warn("Could not load mini_project_assignments table. Run the topic assignment SQL setup when ready.", projectAssignments.error);
     if (miniReviews.error) console.warn("Could not load mini_project_reviews table. Run the mini project SQL setup when ready.", miniReviews.error);
     if (photoRecords.error) console.warn("Could not load newbie_photos table. Run the photo SQL setup when ready.", photoRecords.error);
     if (!mentorsResult.error) applyMentorRows(mentorsResult.data);
@@ -998,10 +1055,12 @@ async function loadSharedData(options = {}) {
     state.groupCorrections = {};
     state.individualRemarks = {};
     state.miniProjectReviews = {};
+    state.miniProjectAssignments = {};
     if (includeAdminData) state.reports = {};
 
     corrections.data.forEach(applyGroupCorrectionRow);
     remarks.data.forEach(applyIndividualRemarkRow);
+    if (!projectAssignments.error) projectAssignments.data.forEach(applyMiniProjectAssignmentRow);
     if (!miniReviews.error) miniReviews.data.forEach(applyMiniProjectReviewRow);
     applyPhotoRows(photoRecords.error ? [] : photoRecords.data);
     await hydratePhotoUrls();
@@ -1023,13 +1082,17 @@ function scheduleRefresh() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     saveLocal();
-    const formOpen = Boolean(document.querySelector("#group-review-form, #mini-project-form, .admin-mini-review-form"));
+    const formOpen = Boolean(document.querySelector("#group-review-form, #mini-project-form, #mini-project-topic-form, .admin-mini-review-form"));
     if (location.hash === "#admin" && state.session?.role === "admin") {
       adminDashboard(lastAdminMentor);
       return;
     }
     if (location.hash === "#admin-table" && state.session?.role === "admin" && !formOpen) {
       adminTablePage();
+      return;
+    }
+    if (location.hash === "#mini-project" && state.session?.role === "jury" && !formOpen) {
+      miniProjectDashboard();
       return;
     }
     if (!formOpen) mentorDashboard();
@@ -1054,6 +1117,11 @@ function subscribeSharedData() {
     .on("postgres_changes", { event: "*", schema: "public", table: "mini_project_reviews" }, payload => {
       if (payload.eventType === "DELETE") removeMiniProjectReviewRow(payload.old);
       else applyMiniProjectReviewRow(payload.new);
+      scheduleRefresh();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "mini_project_assignments" }, payload => {
+      if (payload.eventType === "DELETE") removeMiniProjectAssignmentRow(payload.old);
+      else applyMiniProjectAssignmentRow(payload.new);
       scheduleRefresh();
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "newbie_photos" }, async payload => {
@@ -1232,6 +1300,38 @@ function updateMiniProjectAutosaveUi(review) {
   if (note) note.textContent = "Autosaved";
 }
 
+function sanitizeCriteriaInput(input) {
+  const card = input.closest(".criterion-card");
+  const max = Number(card?.dataset.criteriaMax);
+  let value = input.value.trim();
+
+  if (value === "") {
+    card?.classList.remove("scored");
+    const badge = card?.querySelector(".criterion-title-row span");
+    if (badge) badge.textContent = `Not scored /${card?.dataset.criteriaMax || ""}`;
+    return;
+  }
+
+  value = value.replace(/[^\d.]/g, "");
+  const firstDecimal = value.indexOf(".");
+  if (firstDecimal !== -1) {
+    value = value.slice(0, firstDecimal + 1) + value.slice(firstDecimal + 1).replace(/\./g, "");
+  }
+  if (value === "" || value === ".") {
+    input.value = "";
+    card?.classList.remove("scored");
+    const badge = card?.querySelector(".criterion-title-row span");
+    if (badge) badge.textContent = `Not scored /${card?.dataset.criteriaMax || ""}`;
+    return;
+  }
+
+  const safe = normalizeMark(Math.round(Number(value) * 2) / 2, max);
+  input.value = safe === null ? "" : String(safe);
+  card?.classList.toggle("scored", input.value !== "");
+  const badge = card?.querySelector(".criterion-title-row span");
+  if (badge) badge.textContent = input.value === "" ? `Not scored /${max}` : `${input.value}/${max}`;
+}
+
 async function saveMiniProjectDraft(form, options = {}) {
   const payload = miniProjectPayloadFromForm(form);
   if (!payload) return null;
@@ -1370,6 +1470,63 @@ async function clearRecentChangesAsAdmin() {
   if (error) throw error;
 }
 
+async function saveMiniProjectAssignmentsAsAdmin(formData) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can assign mini-project titles.");
+
+  const rows = [];
+  const deleteGroupIds = [];
+  const nextAssignments = {};
+
+  state.data.groups.forEach(group => {
+    const topicKey = formData[`topic::${group.id}`] || "";
+    const topic = topicByKey(topicKey);
+    delete state.reports[`group|${group.id}`];
+
+    if (!topic) {
+      deleteGroupIds.push(group.id);
+      return;
+    }
+
+    const assignment = {
+      groupId: group.id,
+      groupName: group.name,
+      topicKey,
+      updatedAt: new Date().toISOString()
+    };
+    nextAssignments[String(group.id)] = assignment;
+    rows.push({
+      group_id: group.id,
+      group_name: group.name,
+      topic_key: topic.key,
+      topic_title: topic.title,
+      topic_subtitle: topic.subtitle,
+      topic_brief: topic.brief
+    });
+  });
+
+  state.miniProjectAssignments = nextAssignments;
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const actions = [];
+  if (rows.length) {
+    actions.push(supabaseClient
+      .from("mini_project_assignments")
+      .upsert(rows, { onConflict: "group_id" }));
+  }
+  if (deleteGroupIds.length) {
+    actions.push(supabaseClient
+      .from("mini_project_assignments")
+      .delete()
+      .in("group_id", deleteGroupIds));
+  }
+
+  const results = await Promise.all(actions);
+  const error = results.find(result => result.error)?.error;
+  if (error) throw error;
+}
+
 async function persistMiniReviewAsAdmin(review) {
   if (state.session?.role !== "admin") throw new Error("Only admin can edit jury feedback.");
 
@@ -1378,7 +1535,7 @@ async function persistMiniReviewAsAdmin(review) {
     groupId: Number(review.groupId),
     groupName: review.groupName || group?.name || `Group ${review.groupId}`,
     juryName: review.juryName,
-    scores: Object.fromEntries(miniProjectCriteria.map(criterion => [criterion.key, normalizeMark(review.scores?.[criterion.key], criterion.max) || 0])),
+    scores: Object.fromEntries(miniProjectCriteria.map(criterion => [criterion.key, miniCriterionScore(review.scores, criterion) || 0])),
     groupNote: review.groupNote || "",
     individualNotes: Object.fromEntries(Object.entries(review.individualNotes || {}).filter(([, value]) => String(value || "").trim())),
     updatedAt: new Date().toISOString()
@@ -1450,10 +1607,15 @@ function juryTabs() {
 }
 
 function criteriaSelectView(criterion, value = "") {
-  const selected = value === "" || value === null || value === undefined ? "" : Number(value);
-  const values = Array.from({ length: Math.round(criterion.max * 2) + 1 }, (_, index) => index / 2);
-  const fullHint = [criterion.prompt, ...(criterion.questions || [])].join(" ");
-  return `<div class="criterion-card ${selected !== "" ? "scored" : ""}" data-criteria-max="${criterion.max}" title="${esc(fullHint)}"><div class="criterion-top"><div><strong>${esc(criterion.label)}</strong><small>${esc(criterion.prompt)}</small></div><span>${selected !== "" ? `${selected}/${criterion.max}` : `/${criterion.max}`}</span></div><input type="hidden" name="${esc(criterion.key)}" value="${selected !== "" ? esc(selected) : ""}" data-criteria-input><div class="criteria-buttons">${values.map(item => `<button type="button" class="criteria-score ${selected === item ? "active" : ""}" data-criteria-score="${item}">${item}</button>`).join("")}</div><details class="criteria-questions"><summary>Judging questions</summary><ul>${(criterion.questions || []).map(question => `<li>${esc(question)}</li>`).join("")}</ul></details></div>`;
+  const normalized = normalizeMark(value, criterion.max);
+  const selected = normalized === null ? "" : Math.round(normalized * 2) / 2;
+  const values = Array.from({ length: Math.round(Number(criterion.max) * 2) + 1 }, (_, index) => index / 2);
+  return `<div class="criterion-card ${selected !== "" ? "scored" : ""}" data-criteria-max="${criterion.max}"><div class="criterion-copy"><div class="criterion-title-row"><strong>${esc(criterion.label)}</strong><span>${selected !== "" ? `${selected}/${criterion.max}` : `Not scored /${criterion.max}`}</span></div><p>${esc(criterion.prompt)}</p></div><label class="criteria-select-panel"><small>Score / ${criterion.max}</small><select name="${esc(criterion.key)}" data-criteria-input><option value="">—</option>${values.map(item => `<option value="${item}" ${selected === item ? "selected" : ""}>${item}</option>`).join("")}</select></label><details class="criteria-question-dropdown"><summary>Questions</summary><div><ul class="criteria-help">${(criterion.questions || []).map(question => `<li>${esc(question)}</li>`).join("")}</ul></div></details></div>`;
+}
+
+function miniTopicBriefView(topic) {
+  if (!topic) return `<div class="mini-topic-brief empty">No project title assigned yet. Ask an admin to choose Smart Budget, Health Alert, or Water Wise for this group.</div>`;
+  return `<details class="mini-topic-brief"><summary><span>Project brief</span><b>${esc(topicFullTitle(topic))}</b></summary><p>${esc(topic.brief)}</p><p><strong>Bonus AI:</strong> ${esc(topic.bonus)}</p></details>`;
 }
 
 function answerGuideView(question) {
@@ -1534,17 +1696,19 @@ function openMiniProject() {
 }
 
 function miniProjectLanding() {
-  shell(`<main class="page simple-page"><nav class="journey" aria-label="Mini project steps"><span class="active">1 <b>Jury</b></span><i></i><span>2 <b>Choose group</b></span><i></i><span>3 <b>Score mini project</b></span></nav><section class="mentor-choice"><p class="eyebrow orange-eyebrow">Mini-project jury</p><h1>Choose your jury name</h1><p>This page is only for mini-project jury scoring out of ${miniProjectTotal} marks.</p>${juryTabs()}</section></main>`);
+  shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero centered"><p class="eyebrow orange-eyebrow">Mini-project jury</p><h1>Choose your jury name</h1><p>Score each group out of ${miniProjectTotal} marks. Pick your name, then choose the group you want to review.</p><span class="mini-jury-score-chip">${miniProjectTotal} marks total</span></section><section class="mentor-choice mini-jury-choice">${juryTabs()}</section></main>`);
 }
 
 function miniProjectDashboard() {
-  shell(`<main class="page simple-page"><nav class="journey" aria-label="Mini project steps"><span class="done">✓ <b>Jury</b></span><i></i><span class="active">2 <b>Choose group</b></span><i></i><span>3 <b>Score</b></span></nav><section class="group-heading"><div><span class="selected-mentor"><i>${state.activeJury[0]}</i> Judging as <strong>${esc(state.activeJury)}</strong></span><h2>Choose a mini project group</h2></div><button class="secondary" data-action="mini-project">Change jury</button></section><section class="group-list">${state.data.groups.map(group => { const review = state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)]; const score = miniProjectScore(review); return `<button class="group-row" data-mini-group="${group.id}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small>${group.participants.length} participants · mini project</small></span><span class="group-status ${review ? "complete" : "new"}"><i></i>${review ? `${score}/${miniProjectTotal}` : "Not scored"}<small>${review ? "Edit review" : "Start"}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">Each jury member submits one score per group. Admin uses the average jury score for the combined leaderboard.</p></main>`);
+  const reviewedCount = state.data.groups.filter(group => state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)]).length;
+  shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero split"><div><p class="eyebrow orange-eyebrow">Mini-project jury</p><h1>Choose a group</h1><p>Open a group, enter the criteria scores, and add notes if needed. Your work autosaves while you review.</p></div><aside class="mini-jury-profile"><span>${esc(state.activeJury[0] || "J")}</span><strong>${esc(state.activeJury)}</strong><small>${reviewedCount}/${state.data.groups.length} groups scored</small><button class="secondary" data-action="mini-project">Change jury</button></aside></section><section class="group-list mini-group-list">${state.data.groups.map(group => { const review = state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)]; const score = miniProjectScore(review); const topic = topicForGroup(group); return `<button class="group-row mini-group-row" data-mini-group="${group.id}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small class="mini-topic-line">${topic ? `<b>${esc(topic.title)}</b> — ${esc(topic.subtitle)}` : "No title assigned yet"}</small><small>${group.participants.length} participants</small></span><span class="group-status ${review ? "complete" : "new"}"><i></i>${review ? `${score}/${miniProjectTotal}` : "Start"}<small>${review ? "Edit review" : "Not scored yet"}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">Admin combines the average mini-project score with the hackathon question marks.</p></main>`);
 }
 
 function miniProjectReviewView(groupId) {
   const group = groupById(groupId);
   const review = state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)] || { scores: {}, individualNotes: {} };
-  shell(`<main class="page guided-review mini-review-page"><nav class="journey" aria-label="Mini project steps"><span class="done">✓ <b>${esc(state.activeJury)}</b></span><i></i><span class="done">✓ <b>${esc(group.name)}</b></span><i></i><span class="active">3 <b>Score</b></span></nav><div class="review-toolbar mini-toolbar"><button class="back-link" data-action="mini-dashboard">← Groups</button><div class="question-progress"><span>${miniProjectScore(review)}/${miniProjectTotal} selected</span><div><i style="width:${miniProjectScore(review) / miniProjectTotal * 100}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved before" : "Not scored yet"}</span></div><section class="workflow mini-workflow"><form id="mini-project-form" data-group="${group.id}"><div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-score-head"><div><p class="eyebrow">Mini project assessment</p><h1>${esc(group.name)}</h1><p class="subtle">Choose each criteria score, then add group and individual notes below. Tap a selected score again to unselect it.</p></div><strong>${esc(state.activeJury)}</strong></div><div class="criteria-grid">${miniProjectCriteria.map(criterion => criteriaSelectView(criterion, review.scores?.[criterion.key])).join("")}</div></article><aside class="card mini-notes-card"><div class="mini-score-head compact"><div><p class="eyebrow orange-eyebrow">Feedback</p><h2>Group & individual notes</h2><p class="subtle">Notes are optional, but this is the main space. Expand any box for longer feedback.</p></div></div><div class="jury-note-panel important"><div><strong>Group note <em>Important</em></strong><small>Capture the reason behind the score.</small><button class="subtle-link note-clear" type="button" data-clear-note="group">Clear group note</button></div><textarea name="groupNote" placeholder="Strengths, weaknesses, what affected the score…">${esc(review.groupNote)}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes <em>Important</em></strong><small>Add participant-specific observations if useful.</small><button class="subtle-link note-clear" type="button" data-clear-note="individual">Clear individual notes</button></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="miniNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
+  const topic = topicForGroup(group);
+  shell(`<main class="page guided-review mini-review-page"><div class="mini-review-topbar"><div class="mini-review-left"><button class="back-link" data-action="mini-dashboard">← Groups</button></div><div class="mini-review-title"><span>${esc(group.name)}</span><strong>${esc(topic?.title || "No title assigned")}</strong><small>${esc(state.activeJury)}</small>${topic ? `<em>${esc(topic.subtitle)}</em>` : ""}</div><div class="mini-review-meta"><div class="question-progress"><span>${miniProjectScore(review)}/${miniProjectTotal}</span><div><i style="width:${miniProjectScore(review) / miniProjectTotal * 100}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved" : "Not scored"}</span></div></div><section class="workflow mini-workflow"><form id="mini-project-form" data-group="${group.id}">${miniTopicBriefView(topic)}<div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-card-strip"><strong>Criteria scores</strong><span>Half marks allowed · choose — to clear</span></div><div class="criteria-grid">${miniProjectCriteria.map(criterion => criteriaSelectView(criterion, miniCriterionScore(review.scores, criterion))).join("")}</div></article><aside class="card mini-notes-card"><div class="mini-card-strip note-strip"><strong>Notes</strong><span>${group.participants.length} participants</span></div><div class="jury-note-panel important"><div><strong>Group note</strong><button class="subtle-link note-clear" type="button" data-clear-note="group">Clear</button></div><textarea name="groupNote" placeholder="Group strengths, weaknesses, reason behind score…">${esc(review.groupNote)}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes</strong><button class="subtle-link note-clear" type="button" data-clear-note="individual">Clear</button></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="miniNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
 }
 
 function correctionView(groupId, qid = 1) {
@@ -1584,13 +1748,15 @@ function closePhotoViewer() {
 function buildGroupSummary(group) {
   const entries = Object.entries(state.groupCorrections).filter(([key]) => key.split("|")[0] === String(group.id)).map(([key, value]) => ({ question: key.split("|")[1], ...value }));
   const miniReviews = miniReviewsForGroup(group);
-  if (!entries.length && !miniReviews.length) return "No mentor corrections or mini-project reviews have been submitted yet.";
-  if (!entries.length) return `No question corrections yet. Mini project average: ${miniProjectAverage(group)}/${miniProjectTotal} from ${miniReviews.length} jury member(s).`;
+  const topic = topicForGroup(group);
+  const topicCopy = topic ? `Project: ${topicFullTitle(topic)}. ` : "";
+  if (!entries.length && !miniReviews.length) return `${topicCopy}No mentor corrections or mini-project reviews have been submitted yet.`;
+  if (!entries.length) return `${topicCopy}No question corrections yet. Mini project average: ${miniProjectAverage(group)}/${miniProjectTotal} from ${miniReviews.length} jury member(s).`;
   const score = groupScore(group);
   const max = knownTotalMarks();
   const observations = entries.map(item => item.groupRemark).filter(Boolean);
   const miniCopy = miniReviews.length ? ` Mini project average: ${miniProjectAverage(group)}/${miniProjectTotal} from ${miniReviews.length} jury member(s).` : " Mini project not scored yet.";
-  return `${entries.length} shared question marks assembled. Current score: ${score}/${max} hackathon marks.${miniCopy} ${observations.length ? `Key observations: ${observations.slice(0, 3).join(" · ")}` : "Add group observations to enrich the admin summary."}`;
+  return `${topicCopy}${entries.length} shared question marks assembled. Current score: ${score}/${max} hackathon marks.${miniCopy} ${observations.length ? `Key observations: ${observations.slice(0, 3).join(" · ")}` : "Add group observations to enrich the admin summary."}`;
 }
 
 function buildQuestionSummary(group, question) {
@@ -1633,7 +1799,7 @@ function adminFullInfoTableView() {
   }).join("");
   const individualSummary = group => group.participants.map(person => `<div class="admin-person-row">${participantNameBlock(person)}<p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("");
 
-  return `<article class="card report-card admin-full-table-card"><div class="report-heading"><div><p class="eyebrow">Everything assembled</p><h2>Group + individual review table</h2></div><span class="ai-badge">Admin only</span></div><div class="admin-table-wrap"><table class="admin-info-table"><thead><tr><th>Group</th><th>Score</th><th>Group notes</th><th>Questions</th><th>Individual feedback</th></tr></thead><tbody>${rows.map(row => `<tr><td><strong>${esc(row.group.name)}</strong><small>${row.group.participants.length} participants</small></td><td><b>${row.total}/${row.max}</b><small>Hackathon ${row.hackathon}/${row.hackathonMax}</small><small>Mini ${row.mini}/${row.miniMax} · ${row.juryCount} jury</small></td><td><p>${esc(state.reports[`group|${row.group.id}`] || buildGroupSummary(row.group))}</p>${miniProjectBreakdownView(row.group, { compact: true })}</td><td><div class="admin-question-chips">${questionSummary(row.group)}</div></td><td><div class="admin-person-list">${individualSummary(row.group)}</div></td></tr>`).join("")}</tbody></table></div></article>`;
+  return `<article class="card report-card admin-full-table-card"><div class="report-heading"><div><p class="eyebrow">Everything assembled</p><h2>Group + individual review table</h2></div><span class="ai-badge">Admin only</span></div><div class="admin-table-wrap"><table class="admin-info-table"><thead><tr><th>Group</th><th>Score</th><th>Group notes</th><th>Questions</th><th>Individual feedback</th></tr></thead><tbody>${rows.map(row => { const topic = topicForGroup(row.group); return `<tr><td><strong>${esc(row.group.name)}</strong><small>${topic ? esc(topicFullTitle(topic)) : "No mini-project title assigned"}</small><small>${row.group.participants.length} participants</small></td><td><b>${row.total}/${row.max}</b><small>Hackathon ${row.hackathon}/${row.hackathonMax}</small><small>Mini ${row.mini}/${row.miniMax} · ${row.juryCount} jury</small></td><td><p>${esc(state.reports[`group|${row.group.id}`] || buildGroupSummary(row.group))}</p>${miniProjectBreakdownView(row.group, { compact: true })}</td><td><div class="admin-question-chips">${questionSummary(row.group)}</div></td><td><div class="admin-person-list">${individualSummary(row.group)}</div></td></tr>`; }).join("")}</tbody></table></div></article>`;
 }
 
 function miniProjectBreakdownView(group, options = {}) {
@@ -1647,6 +1813,15 @@ function miniProjectBreakdownView(group, options = {}) {
   }).join("")}</div>`;
 }
 
+function miniProjectTopicAdminView() {
+  const topicOptions = topicKey => [
+    `<option value="">— Unassigned / remove title —</option>`,
+    ...miniProjectTopics.map(topic => `<option value="${esc(topic.key)}" ${topicKey === topic.key ? "selected" : ""}>${esc(topicFullTitle(topic))}</option>`)
+  ].join("");
+
+  return `<article class="card report-card mini-topic-admin-card"><div class="report-heading"><div><p class="eyebrow">Mini-project titles</p><h2>Assign, change, or unassign group topics</h2><p class="subtle">Choose a title to assign/change it, or choose “Unassigned / remove title” to remove it from the jury screens.</p></div><span class="ai-badge">${Object.keys(state.miniProjectAssignments).length}/${state.data.groups.length} assigned</span></div><form id="mini-project-topic-form" class="mini-topic-admin-form"><div class="mini-topic-admin-grid">${state.data.groups.map(group => { const assignment = assignmentForGroup(group); const topic = topicByKey(assignment?.topicKey); return `<label><span><strong>${esc(group.name)}</strong><small>${topic ? `Current: ${esc(topic.title)}` : "Currently unassigned"}</small></span><select name="topic::${group.id}">${topicOptions(assignment?.topicKey)}</select></label>`; }).join("")}</div><details class="mini-topic-options"><summary>View the 3 topic briefs</summary>${miniProjectTopics.map(topic => `<section><strong>${esc(topicFullTitle(topic))}</strong><p>${esc(topic.brief)}</p><small><b>Bonus AI:</b> ${esc(topic.bonus)}</small></section>`).join("")}</details><button class="primary" type="submit">Save title changes</button></form></article>`;
+}
+
 function adminMiniReviewEditorView() {
   const reviews = Object.values(state.miniProjectReviews)
     .sort((a, b) => Number(a.groupId) - Number(b.groupId) || String(a.juryName).localeCompare(String(b.juryName)));
@@ -1658,7 +1833,7 @@ function adminMiniReviewEditorView() {
   return `<article class="card report-card admin-mini-editor-card"><div class="report-heading"><div><p class="eyebrow">Mini-project admin editor</p><h2>Edit or remove jury feedback</h2><p class="subtle">Change criteria points, clear points while keeping notes, or delete a full jury feedback entry.</p></div><span class="ai-badge">${reviews.length} review${reviews.length === 1 ? "" : "s"}</span></div><div class="admin-mini-editor-list">${reviews.map(review => {
     const group = groupById(review.groupId);
     const score = miniProjectScore(review);
-    return `<form class="admin-mini-review-form" data-group="${esc(review.groupId)}" data-jury="${esc(review.juryName)}"><div class="admin-mini-editor-head"><div><p class="eyebrow">${esc(group?.name || review.groupName || `Group ${review.groupId}`)}</p><h3>${esc(review.juryName)} feedback</h3><small>${score}/${miniProjectTotal} mini-project points</small></div><div class="admin-mini-actions"><button class="secondary" type="button" data-clear-mini-scores="${esc(review.groupId)}|${esc(review.juryName)}">Clear points</button><button class="danger-mini" type="button" data-delete-mini-review="${esc(review.groupId)}|${esc(review.juryName)}">Delete feedback</button><button class="primary" type="submit">Save changes</button></div></div><div class="admin-mini-score-grid">${miniProjectCriteria.map(criterion => `<label><span>${esc(criterion.label)} <b>/${criterion.max}</b></span><input type="number" min="0" max="${criterion.max}" step="0.5" name="${esc(criterion.key)}" value="${esc(normalizeMark(review.scores?.[criterion.key], criterion.max) || 0)}"></label>`).join("")}</div><label class="admin-mini-note-wide"><span>Group note</span><textarea name="groupNote" placeholder="Group-level feedback...">${esc(review.groupNote || "")}</textarea></label><div class="admin-mini-notes-grid">${(group?.participants || []).map(person => `<label>${participantNameBlock(person)}<textarea name="miniNote::${esc(person)}" placeholder="Individual note...">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></form>`;
+    return `<form class="admin-mini-review-form" data-group="${esc(review.groupId)}" data-jury="${esc(review.juryName)}"><div class="admin-mini-editor-head"><div><p class="eyebrow">${esc(group?.name || review.groupName || `Group ${review.groupId}`)}</p><h3>${esc(review.juryName)} feedback</h3><small>${score}/${miniProjectTotal} mini-project points</small></div><div class="admin-mini-actions"><button class="secondary" type="button" data-clear-mini-scores="${esc(review.groupId)}|${esc(review.juryName)}">Clear points</button><button class="danger-mini" type="button" data-delete-mini-review="${esc(review.groupId)}|${esc(review.juryName)}">Delete feedback</button><button class="primary" type="submit">Save changes</button></div></div><div class="admin-mini-score-grid">${miniProjectCriteria.map(criterion => `<label><span>${esc(criterion.label)} <b>/${criterion.max}</b></span><input type="number" min="0" max="${criterion.max}" step="0.5" name="${esc(criterion.key)}" value="${esc(miniCriterionScore(review.scores, criterion) || 0)}"></label>`).join("")}</div><label class="admin-mini-note-wide"><span>Group note</span><textarea name="groupNote" placeholder="Group-level feedback...">${esc(review.groupNote || "")}</textarea></label><div class="admin-mini-notes-grid">${(group?.participants || []).map(person => `<label>${participantNameBlock(person)}<textarea name="miniNote::${esc(person)}" placeholder="Individual note...">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></form>`;
   }).join("")}</div></article>`;
 }
 
@@ -1667,7 +1842,7 @@ function juryAdminView() {
 }
 
 function adminDetailedGroupCardsView() {
-  return state.data.groups.map(group => `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2></div><span class="ai-badge">${groupScore(group) + miniProjectAverage(group)}/${knownTotalMarks() + miniProjectTotal} total</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Mini project</h3>${miniProjectBreakdownView(group)}<h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`).join("");
+  return state.data.groups.map(group => { const topic = topicForGroup(group); return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group summary</h2>${topic ? `<p class="subtle">${esc(topicFullTitle(topic))}</p>` : ""}</div><span class="ai-badge">${groupScore(group) + miniProjectAverage(group)}/${knownTotalMarks() + miniProjectTotal} total</span></div><p class="summary-text">${esc(state.reports[`group|${group.id}`] || buildGroupSummary(group))}</p><h3>Mini project</h3>${miniProjectBreakdownView(group)}<h3>Question points</h3><div class="question-summary-list">${state.data.questions.map(question => { const hasCorrection = Boolean(state.groupCorrections[correctionKey(group.id, question.id)]); return `<div><strong>Q${question.id}</strong><p>${esc(state.reports[`question|${group.id}|${question.id}`] || buildQuestionSummary(group, question))}</p>${hasCorrection ? `<button class="danger-mini" data-delete-correction="${group.id}|${question.id}">Remove correction</button>` : ""}</div>`; }).join("")}</div><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`person|${person}`] || buildPersonFeedback(person))}</p></div>`).join("")}</div></article>`; }).join("");
 }
 
 function adminTablePage() {
@@ -1689,11 +1864,13 @@ function buildPersonFeedback(person) {
 
 function buildMiniProjectSummary(group) {
   const reviews = miniReviewsForGroup(group);
-  if (!reviews.length) return "Mini project has not been scored yet.";
+  const topic = topicForGroup(group);
+  const topicCopy = topic ? `Project title: ${topicFullTitle(topic)}. ` : "";
+  if (!reviews.length) return `${topicCopy}Mini project has not been scored yet.`;
   const juryDetails = reviews
     .sort((a, b) => String(a.juryName).localeCompare(String(b.juryName)))
     .map(review => `${review.juryName || "Jury"}: ${miniProjectScore(review)}/${miniProjectTotal}${review.groupNote ? ` — ${review.groupNote}` : ""}`);
-  return `Average mini-project score: ${miniProjectAverage(group)}/${miniProjectTotal} from ${reviews.length} jury member(s). ${juryDetails.join(" · ")}`;
+  return `${topicCopy}Average mini-project score: ${miniProjectAverage(group)}/${miniProjectTotal} from ${reviews.length} jury member(s). ${juryDetails.join(" · ")}`;
 }
 
 function historyList() {
@@ -1711,7 +1888,7 @@ function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${photoManagerView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Mentor management</p><h2>Spoon mentors</h2></div><span class="ai-badge">${state.mentors.length} active</span></div><form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div></article>${juryAdminView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><div class="subtle-actions"><span class="ai-badge">${esc(syncLabel())}</span>${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div></div>${historyList()}</article></section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${miniProjectTopicAdminView()}${photoManagerView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Mentor management</p><h2>Spoon mentors</h2></div><span class="ai-badge">${state.mentors.length} active</span></div><form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div></article>${juryAdminView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><div class="subtle-actions"><span class="ai-badge">${esc(syncLabel())}</span>${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div></div>${historyList()}</article></section></main>`);
 }
 
 function openPublicForm() {
@@ -1734,7 +1911,8 @@ function dashboard() {
   if (location.hash === "#admin-table") return state.session?.role === "admin" ? adminTablePage() : loginView();
   if (location.hash === "#admin") return state.session?.role === "admin" ? adminDashboard(lastAdminMentor) : loginView();
   if (location.hash === "#mini-project") {
-    if (state.session?.role !== "jury") state.session = { name: state.activeJury, role: "jury" };
+    state.session = { name: state.activeJury, role: "jury" };
+    saveLocal();
     return miniProjectLanding();
   }
   openPublicForm();
@@ -1784,6 +1962,18 @@ document.addEventListener("submit", async event => {
       adminDashboard(lastAdminMentor);
     } catch (error) {
       showToast(error.message || "Could not rename jury.");
+    }
+  }
+
+  if (event.target.id === "mini-project-topic-form") {
+    const data = Object.fromEntries(new FormData(event.target));
+    try {
+      await saveMiniProjectAssignmentsAsAdmin(data);
+      showToast(remoteEnabled() ? "✓ Group titles updated in Supabase" : "✓ Group titles updated locally");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      console.error("Mini-project title save failed", error);
+      showToast(error.message ? `Title save failed: ${error.message}` : "Could not save group titles.");
     }
   }
 
@@ -1946,18 +2136,6 @@ document.addEventListener("click", async event => {
     picker.querySelectorAll(".mark-chip").forEach(chip => chip.classList.toggle("active", chip === button));
     return;
   }
-  if (button.dataset.criteriaScore) {
-    const card = button.closest(".criterion-card");
-    const input = card?.querySelector("[data-criteria-input]");
-    if (!card || !input) return;
-    const wasActive = button.classList.contains("active");
-    input.value = wasActive ? "" : button.dataset.criteriaScore;
-    card.classList.toggle("scored", !wasActive);
-    card.querySelector(".criterion-top span").textContent = wasActive ? `/${card.dataset.criteriaMax}` : `${button.dataset.criteriaScore}/${card.dataset.criteriaMax}`;
-    card.querySelectorAll(".criteria-score").forEach(item => item.classList.toggle("active", !wasActive && item === button));
-    queueMiniProjectAutosave(button.closest("#mini-project-form"), 250);
-    return;
-  }
   if (button.dataset.clearNote) {
     const form = button.closest("#mini-project-form");
     if (!form) return;
@@ -2108,6 +2286,9 @@ document.addEventListener("click", async event => {
 
 document.addEventListener("change", event => {
   if (event.target.closest("#mini-project-form")) {
+    if (event.target.matches("[data-criteria-input]")) {
+      sanitizeCriteriaInput(event.target);
+    }
     queueMiniProjectAutosave(event.target.closest("#mini-project-form"), 600);
   }
   if (event.target.matches("[data-mark-select]")) {
@@ -2126,11 +2307,21 @@ document.addEventListener("change", event => {
 document.addEventListener("input", event => {
   const form = event.target.closest?.("#mini-project-form");
   if (!form) return;
+  if (event.target.matches("[data-criteria-input]")) sanitizeCriteriaInput(event.target);
   queueMiniProjectAutosave(form, 900);
 });
 
 document.addEventListener("keydown", event => {
   if (event.key === "Escape") closePhotoViewer();
+});
+
+window.addEventListener("hashchange", async () => {
+  closePhotoViewer();
+  if ((location.hash === "#admin" || location.hash === "#admin-table") && state.session?.role !== "admin") {
+    const isAdmin = await verifyAdminSession();
+    if (isAdmin) await loadSharedData({ includeAdminData: true });
+  }
+  dashboard();
 });
 
 async function boot() {
