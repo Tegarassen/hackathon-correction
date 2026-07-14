@@ -76,6 +76,8 @@ state = {
   individualRemarks: state.individualRemarks || {},
   miniProjectReviews: state.miniProjectReviews || {},
   miniProjectAssignments: state.miniProjectAssignments || {},
+  miniProjectView: state.miniProjectView || "landing",
+  activeMiniGroup: state.activeMiniGroup || null,
   participantPhotos: state.participantPhotos || {},
   photoUrls: state.photoUrls || {},
   reports: state.reports || {},
@@ -1724,21 +1726,33 @@ function mentorDashboard() {
 function openMiniProject() {
   location.hash = "mini-project";
   state.session = { name: state.activeJury, role: "jury" };
+  state.miniProjectView = "landing";
+  state.activeMiniGroup = null;
   save();
   miniProjectLanding();
 }
 
 function miniProjectLanding() {
+  state.miniProjectView = "landing";
+  state.activeMiniGroup = null;
+  saveLocal();
   shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero centered"><p class="eyebrow orange-eyebrow">Mini-project jury</p><h1>Choose your jury name</h1><p>Score each group out of ${miniProjectTotal} marks. Pick your name, then choose the group you want to review.</p><span class="mini-jury-score-chip">${miniProjectTotal} marks total</span></section><section class="mentor-choice mini-jury-choice">${juryTabs()}</section></main>`);
 }
 
 function miniProjectDashboard() {
+  state.miniProjectView = "groups";
+  state.activeMiniGroup = null;
+  saveLocal();
   const reviewedCount = state.data.groups.filter(group => state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)]).length;
   shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero split"><div><p class="eyebrow orange-eyebrow">Mini-project jury</p><h1>Choose a group</h1><p>Open a group, enter the criteria scores, and add notes if needed. Your work autosaves while you review.</p></div><aside class="mini-jury-profile"><span>${esc(state.activeJury[0] || "J")}</span><strong>${esc(state.activeJury)}</strong><small>${reviewedCount}/${state.data.groups.length} groups scored</small><button class="secondary" data-action="mini-project">Change jury</button></aside></section><section class="group-list mini-group-list">${state.data.groups.map(group => { const review = state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)]; const score = miniProjectScore(review); const topic = topicForGroup(group); return `<button class="group-row mini-group-row" data-mini-group="${group.id}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small class="mini-topic-line">${topic ? `<b>${esc(topic.title)}</b> — ${esc(topic.subtitle)}` : "No title assigned yet"}</small><small>${group.participants.length} participants</small></span><span class="group-status ${review ? "complete" : "new"}"><i></i>${review ? `${score}/${miniProjectTotal}` : "Start"}<small>${review ? "Edit review" : "Not scored yet"}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">Admin combines the average mini-project score with the hackathon question marks.</p></main>`);
 }
 
 function miniProjectReviewView(groupId) {
   const group = groupById(groupId);
+  if (!group) return miniProjectDashboard();
+  state.miniProjectView = "review";
+  state.activeMiniGroup = group.id;
+  saveLocal();
   const review = state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)] || { scores: {}, individualNotes: {} };
   const topic = topicForGroup(group);
   shell(`<main class="page guided-review mini-review-page"><div class="mini-review-topbar"><div class="mini-review-left"><button class="back-link" data-action="mini-dashboard">← Groups</button></div><div class="mini-review-title"><span>${esc(group.name)}</span><strong>${esc(topic?.title || "No title assigned")}</strong><small>${esc(state.activeJury)}</small>${topic ? `<em>${esc(topic.subtitle)}</em>` : ""}</div><div class="mini-review-meta"><div class="question-progress"><span>${miniProjectScore(review)}/${miniProjectTotal}</span><div><i style="width:${miniProjectScore(review) / miniProjectTotal * 100}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved" : "Not scored"}</span></div></div><section class="workflow mini-workflow"><form id="mini-project-form" data-group="${group.id}">${miniTopicBriefView(topic)}<div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-card-strip"><strong>Criteria scores</strong><span>Half marks allowed · choose — to clear</span></div><div class="criteria-grid">${miniProjectCriteria.map(criterion => criteriaSelectView(criterion, miniCriterionScore(review.scores, criterion))).join("")}</div></article><aside class="card mini-notes-card"><div class="mini-card-strip note-strip"><strong>Notes</strong><span>${group.participants.length} participants</span></div><div class="jury-note-panel important"><div><strong>Group note</strong><button class="subtle-link note-clear" type="button" data-clear-note="group">Clear</button></div><textarea name="groupNote" placeholder="Group strengths, weaknesses, reason behind score…">${esc(review.groupNote)}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes</strong><button class="subtle-link note-clear" type="button" data-clear-note="individual">Clear</button></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="miniNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
@@ -1946,6 +1960,8 @@ function openCurrentPublicFlow() {
   if (location.hash === "#mini-project") {
     state.session = { name: state.activeJury, role: "jury" };
     save();
+    if (state.miniProjectView === "review" && state.activeMiniGroup) return miniProjectReviewView(state.activeMiniGroup);
+    if (state.miniProjectView === "groups") return miniProjectDashboard();
     return miniProjectLanding();
   }
   openPublicForm();
@@ -1957,6 +1973,8 @@ function dashboard() {
   if (location.hash === "#mini-project") {
     state.session = { name: state.activeJury, role: "jury" };
     saveLocal();
+    if (state.miniProjectView === "review" && state.activeMiniGroup) return miniProjectReviewView(state.activeMiniGroup);
+    if (state.miniProjectView === "groups") return miniProjectDashboard();
     return miniProjectLanding();
   }
   openPublicForm();
@@ -2212,6 +2230,7 @@ document.addEventListener("click", async event => {
   }
   if (button.dataset.miniGroup) {
     miniProjectReviewView(button.dataset.miniGroup);
+    return;
   }
   if (button.dataset.groupReview) {
     const group = groupById(button.dataset.groupReview);
