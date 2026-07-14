@@ -262,22 +262,33 @@ img.participant-photo { background:#dceaf2; }
 .notice { border-left: 4px solid var(--green); padding: 12px 16px; background: #e8f8f6; border-radius: 8px; margin-bottom: 18px; }
 .toast { position:fixed; right:22px; bottom:22px; z-index:100; padding:12px 17px; border-radius:11px; background:var(--ink); color:white; box-shadow:0 14px 35px rgba(21,33,55,.25); animation:toast-in .2s ease-out; }
 @keyframes toast-in { from { transform:translateY(8px); opacity:0; } }
-@media (max-width: 800px) {
-  .login { grid-template-columns: 1fr; }
-  .login-art { min-height: 280px; }
-  .stats { grid-template-columns: 1fr 1fr; }
-  .grid, .review-layout { grid-template-columns: 1fr; }
-  .sidebar { position: static; }
-  .hero { align-items: start; flex-direction: column; }
-  .individual-grid, .mentor-inputs, .mentor-admin-list, .photo-admin-grid, .photo-upload-form { grid-template-columns:1fr; }
-  .welcome-panel, .steps { grid-template-columns:1fr; }
-  .section-heading, .question-heading { align-items:flex-start; flex-direction:column; }
-  .simple-hero { grid-template-columns:1fr; align-items:start; }
-  .review-toolbar { grid-template-columns:1fr 1fr; }
-  .question-progress { grid-column:1/-1; grid-row:2; }
-  .review-toolbar .autosave-note { justify-self:end; }
-  .mentor-choice .mentor-tabs { grid-template-columns:repeat(4,minmax(0,1fr)); }
-}
+@media (max-width: 800px) { .login { grid-template-columns: 1fr; } .login-art { min-height: 280px; } .stats { grid-template-columns: 1fr 1fr; } .grid, .review-layout { grid-template-columns: 1fr; } .sidebar { position: static; } .hero { align-items: start; flex-direction: column; } .individual-grid, .mentor-inputs, .mentor-admin-list, .photo-admin-grid, .photo-upload-form { grid-template-columns:1fr; } .welcome-panel, .steps { grid-template-columns:1fr; } .section-heading, .question-heading { align-items:flex-start; flex-direction:column; } .simple-hero { grid-template-columns:1fr; align-items:start; } .review-toolbar { grid-template-columns:1fr 1fr; } .question-progress { grid-column:1/-1; grid-row:2; } .review-toolbar .autosave-note { justify-self:end; } .mentor-choice .mentor-tabs { grid-template-columns:repeat(4,minmax(0,1fr)); } }
 @media (max-width: 600px) { .product-name { display:none; } .spoon-logo { width:105px; } }
 @media (max-width: 600px) { .group-row { grid-template-columns:42px 1fr 24px; } .group-status { grid-column:2; grid-row:2; display:flex; } .group-status small:before { content:"· "; } .row-arrow { grid-column:3; grid-row:1/3; } .status-key { justify-content:flex-start; flex-wrap:wrap; } .journey b { display:none; } .journey i { width:35px; } }
 @media (max-width: 480px) { .stats { grid-template-columns: 1fr; } .userbox span:not(.role) { display:none; } .role { display:none; } .welcome-panel { padding:24px; } .sticky-actions { bottom:6px; } .mentor-choice .mentor-tabs { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+/* ===================================================================================
+   Mada Jury — additive rules only. Reuses .mentor-choice/.mentor-tabs, .status-row/
+   .status, .group-row/.group-list, .mark-picker/.mark-chips, .scoreboard-list,
+   .sticky-actions and .toast/.notice from above. These new rules cover the few
+   genuinely new pieces: office picker cards, topic picker cards, and the bonus badge.
+   =================================================================================== */
+.mentor-choice .mentor-tab small.optional { display:block; margin-top:3px; color:inherit; opacity:.72; font-weight:600; text-transform:none; letter-spacing:0; }
+.jury-office-row { align-items:stretch; }
+.jury-office-card { display:grid; gap:6px; text-align:center; padding:22px 14px; }
+.jury-office-card strong { font-size:20px; font-family:"Montserrat",sans-serif; }
+.jury-office-card small { color:inherit; opacity:.75; }
+.jury-office-card.selected small { opacity:.9; }
+.jury-topic-row { grid-template-columns:1fr; gap:10px; }
+.jury-topic-card { display:grid; gap:5px; text-align:left; padding:14px 16px; }
+.jury-topic-card strong { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--orange); }
+.jury-topic-card.selected strong { color:white; }
+.jury-topic-card small { color:inherit; opacity:.85; line-height:1.5; }
+.bonus-badge { margin-left:8px; }
+.bonus-tag { margin-left:6px; color:var(--orange); font-weight:800; font-size:12px; }
+.scoreboard-card .scoreboard-list > div { grid-template-columns:34px 1fr 140px 108px; }
+.scoreboard-card .scoreboard-list span { flex:0 0 auto; }
+.scoreboard-card .scoreboard-list b { display:flex; flex-direction:column; align-items:flex-end; gap:2px; justify-content:center; white-space:nowrap; }
+.scoreboard-card .scoreboard-list .bonus-tag { margin-left:0; }
+.group-list + .scoreboard-card { margin-top:10px; }
+.workflow + .scoreboard-card { margin-top:18px; }

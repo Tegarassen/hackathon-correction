@@ -44,6 +44,11 @@ state = {
   reports: state.reports || {},
   changeHistory: state.changeHistory || [],
   syncStatus: "loading",
+  juryName: state.juryName || null,
+  activeJuryOffice: state.activeJuryOffice || null,
+  juryTopics: state.juryTopics || {},
+  juryScores: state.juryScores || {},
+  juryRemarks: state.juryRemarks || {},
   data: seed
 };
 
@@ -52,6 +57,7 @@ if (!state.mentors.includes(state.activeMentor)) state.activeMentor = state.ment
 
 let lastAdminMentor = "all";
 let refreshTimer = null;
+let juryRefreshTimer = null;
 
 const saveLocal = () => localStorage.setItem("spoon-state-v2", JSON.stringify(state));
 const save = saveLocal;
@@ -554,10 +560,330 @@ function remarkKey(groupId, person, qid) {
   return `${groupId}|${person}|${qid}`;
 }
 
+// ===================================================================================
+// Mada Jury — parallel feature for the Madagascar mini-project hackathon jury flow.
+// This is a completely separate concept from the Spoon mentor correction flow above:
+// separate seed data, separate state keys, separate Supabase tables. Nothing above
+// this block or in the mentor-correction views/handlers is modified by this feature.
+// ===================================================================================
+
+const juryOffices = ["Diego", "Fina", "Tana"];
+
+const juryTopics = [
+  {
+    id: 1,
+    title: "Cyclone Ready Mada: Helping Citizens Prepare, Report, and Recover",
+    description: "Design and implement an app that helps citizens in Madagascar prepare for cyclones, receive safety alerts, find nearby shelters, report damage, and access recovery information after disasters such as Cyclone Gezani and Cyclone Fytia."
+  },
+  {
+    id: 2,
+    title: "Food Wise Madagascar: Understanding Food Prices and Hunger Risks",
+    description: "Design and implement an app that helps citizens and authorities understand food prices and hunger risks across Madagascar."
+  },
+  {
+    id: 3,
+    title: "Water & Power Watch Mada: Helping Citizens Track Service Cuts",
+    description: "Design and implement an app that helps citizens track water and power service cuts across Madagascar."
+  }
+];
+
+const juryCriteria = [
+  { key: "usability", label: "Usability", prompt: "Is the app easy to use during urgent cyclone/emergency situations?", bonus: false },
+  { key: "content", label: "Content", prompt: "Is the disaster information accurate, simple, practical, and relevant to Madagascar?", bonus: false },
+  { key: "interactivity", label: "Interactivity", prompt: "Are users able to check alerts, complete emergency checklists, report damages, or find shelters on a map?", bonus: false },
+  { key: "design", label: "Design", prompt: "Is the app visually clear, serious, accessible, and suitable for emergency communication?", bonus: false },
+  { key: "performance", label: "Performance", prompt: "Does the app load quickly and work well on mobile devices? (Also consider whether a backend stores cyclone alerts, shelter locations, emergency contacts, and citizen reports.)", bonus: false },
+  { key: "innovation", label: "Innovation", prompt: "Does the app offer a useful and creative way to help citizens before, during, and after cyclones?", bonus: false },
+  { key: "collaboration", label: "Collaboration", prompt: "Were effective collaboration tools and practices used during development?", bonus: false },
+  { key: "bonus_ai", label: "Bonus — AI integration", prompt: "Integrate AI to explain cyclone warnings in simple language and generate personalised safety advice for families, students, elderly people, and people living in high-risk areas.", bonus: true }
+];
+
+const juryMembersSeed = [
+  { name: "Jhonny Raherison", office: "Tana" },
+  { name: "Tojonirina Rarivoarison (Tojo)", office: "Tana" },
+  { name: "Gianna Ramasombazaha", office: "Tana" },
+  { name: "Joël Randrianarivelo", office: "Tana" },
+  { name: "Kintana Andriambololona", office: "Fina" },
+  { name: "Tovonirina Andrianarivelo (Tovo)", office: "Fina" },
+  { name: "Ya'sin Figuelia", office: "Diego" },
+  { name: "Hermeland Botrahaly", office: "Diego" }
+];
+
+const juryGroupsSeed = [
+  { id: 1, office: "Diego", name: "Diego · Group 1", participants: ["ANDRY Nizwami Ibrahim", "RANAIVOSOA Edwino"] },
+  { id: 2, office: "Fina", name: "Fina · Group 1", participants: ["ANDRITIANA Saotra Idealilalaina", "RAZAFINATOANDRO Ando Henri", "ANDRIANTSILAVINA Tsiferana Heritsilavo", "AMBOARAMPITIAVANA Nomena Sarobidy"] },
+  { id: 3, office: "Fina", name: "Fina · Group 2", participants: ["RAKOTONIRINA Andrianina Laïscia", "BEMAZAVA julio", "RALAIVAO Ambinintsoa Francky", "VALISOAFANDRESENA Setraniaina Andriamampiandra"] },
+  { id: 4, office: "Tana", name: "Tana · Group 1", participants: ["ANDRIANARIVONY Zo Michaël", "RAKOTOARISOA Andy Ny Rindra", "MBOLATSIORY Rihantiana Tiarintsoa", "VOLOLONIRINA Doris Sylvie", "RANDRIANARIVELO Stéphan"] },
+  { id: 5, office: "Tana", name: "Tana · Group 2", participants: ["MAMPIONONA Njakarimanana Nerson", "RABENARIVO Ryan Lizka", "Rakotonirina Tahina Fanomezantsoa", "RAZAFIMAMY Antonino Iraky Ny Avo", "RATOVONJOELY Ny Ando Irintsoa"] }
+];
+
+const juryGroupById = id => juryGroupsSeed.find(group => group.id === Number(id));
+const juryGroupsForOffice = office => juryGroupsSeed.filter(group => group.office === office);
+const juryScoreKey = (groupId, criterionKey) => `${groupId}|${criterionKey}`;
+const juryRemarkKeyFor = (groupId, juryName) => `${groupId}|${juryName}`;
+const juryBaseCriteria = () => juryCriteria.filter(c => !c.bonus);
+const juryBonusCriterion = () => juryCriteria.find(c => c.bonus);
+const juryGroupTopic = groupId => state.juryTopics[groupId] || null;
+const juryGroupBaseTotal = groupId => juryBaseCriteria().reduce((sum, c) => sum + (Number(state.juryScores[juryScoreKey(groupId, c.key)]?.score) || 0), 0);
+const juryGroupBonus = groupId => {
+  const bonus = juryBonusCriterion();
+  return Number(state.juryScores[juryScoreKey(groupId, bonus.key)]?.score) || 0;
+};
+const juryGroupComplete = groupId => juryBaseCriteria().every(c => {
+  const entry = state.juryScores[juryScoreKey(groupId, c.key)];
+  return entry && entry.score !== null && entry.score !== undefined;
+});
+const juryGroupAnyScore = groupId => juryCriteria.some(c => Boolean(state.juryScores[juryScoreKey(groupId, c.key)]));
+
+function applyJuryTopicRow(row) {
+  if (!row) return;
+  state.juryTopics[row.group_id] = { topicId: row.topic_id, juryName: row.jury_name || "", updatedAt: row.updated_at };
+}
+
+function removeJuryTopicRow(row) {
+  if (!row) return;
+  delete state.juryTopics[row.group_id];
+}
+
+function applyJuryScoreRow(row) {
+  if (!row) return;
+  state.juryScores[juryScoreKey(row.group_id, row.criterion_key)] = {
+    score: row.score === null || row.score === undefined ? null : Number(row.score),
+    maxScore: row.max_score ?? 10,
+    label: row.criterion_label || "",
+    juryName: row.jury_name || "",
+    updatedAt: row.updated_at
+  };
+}
+
+function removeJuryScoreRow(row) {
+  if (!row) return;
+  delete state.juryScores[juryScoreKey(row.group_id, row.criterion_key)];
+}
+
+function applyJuryRemarkRow(row) {
+  if (!row) return;
+  const key = juryRemarkKeyFor(row.group_id, row.jury_name);
+  if (row.remark?.trim()) state.juryRemarks[key] = { remark: row.remark, updatedAt: row.updated_at };
+  else delete state.juryRemarks[key];
+}
+
+function removeJuryRemarkRow(row) {
+  if (!row) return;
+  delete state.juryRemarks[juryRemarkKeyFor(row.group_id, row.jury_name)];
+}
+
+async function loadJuryData() {
+  if (!remoteEnabled()) return;
+
+  try {
+    const [topics, scores, remarks] = await Promise.all([
+      supabaseClient.from("jury_group_topics").select("*"),
+      supabaseClient.from("jury_scores").select("*"),
+      supabaseClient.from("jury_remarks").select("*")
+    ]);
+    if (topics.error) throw topics.error;
+    if (scores.error) throw scores.error;
+    if (remarks.error) throw remarks.error;
+
+    state.juryTopics = {};
+    state.juryScores = {};
+    state.juryRemarks = {};
+    (topics.data || []).forEach(applyJuryTopicRow);
+    (scores.data || []).forEach(applyJuryScoreRow);
+    (remarks.data || []).forEach(applyJuryRemarkRow);
+    saveLocal();
+  } catch (error) {
+    console.warn("Could not load Mada Jury tables. Run supabase_mada_jury.sql to set them up.", error);
+  }
+}
+
+function scheduleJuryRefresh() {
+  clearTimeout(juryRefreshTimer);
+  juryRefreshTimer = setTimeout(() => {
+    saveLocal();
+    if (!location.hash.startsWith("#jury")) return;
+    if (document.querySelector("#jury-group-form")) return;
+    juryRouter();
+  }, 350);
+}
+
+function subscribeJuryData() {
+  if (!remoteEnabled()) return;
+
+  supabaseClient
+    .channel("mada-jury")
+    .on("postgres_changes", { event: "*", schema: "public", table: "jury_group_topics" }, payload => {
+      if (payload.eventType === "DELETE") removeJuryTopicRow(payload.old);
+      else applyJuryTopicRow(payload.new);
+      scheduleJuryRefresh();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "jury_scores" }, payload => {
+      if (payload.eventType === "DELETE") removeJuryScoreRow(payload.old);
+      else applyJuryScoreRow(payload.new);
+      scheduleJuryRefresh();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "jury_remarks" }, payload => {
+      if (payload.eventType === "DELETE") removeJuryRemarkRow(payload.old);
+      else applyJuryRemarkRow(payload.new);
+      scheduleJuryRefresh();
+    })
+    .subscribe();
+}
+
+async function persistJuryTopic(groupId, topicId) {
+  state.juryTopics[groupId] = { topicId, juryName: state.juryName, updatedAt: new Date().toISOString() };
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const { error } = await supabaseClient
+    .from("jury_group_topics")
+    .upsert({ group_id: groupId, topic_id: topicId, jury_name: state.juryName }, { onConflict: "group_id" });
+  if (error) throw error;
+}
+
+async function persistJuryScores(groupId, scoresByKey) {
+  Object.entries(scoresByKey).forEach(([key, value]) => {
+    const criterion = juryCriteria.find(c => c.key === key);
+    state.juryScores[juryScoreKey(groupId, key)] = {
+      score: value,
+      maxScore: 10,
+      label: criterion?.label || key,
+      juryName: state.juryName,
+      updatedAt: new Date().toISOString()
+    };
+  });
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const rows = Object.entries(scoresByKey).map(([key, value]) => {
+    const criterion = juryCriteria.find(c => c.key === key);
+    return {
+      group_id: groupId,
+      criterion_key: key,
+      criterion_label: criterion?.label || key,
+      score: value,
+      max_score: 10,
+      jury_name: state.juryName
+    };
+  });
+
+  const { error } = await supabaseClient.from("jury_scores").upsert(rows, { onConflict: "group_id,criterion_key" });
+  if (error) throw error;
+}
+
+async function persistJuryRemark(groupId, remarkText) {
+  const key = juryRemarkKeyFor(groupId, state.juryName);
+  const clean = (remarkText || "").trim();
+  if (clean) state.juryRemarks[key] = { remark: clean, updatedAt: new Date().toISOString() };
+  else delete state.juryRemarks[key];
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  if (!clean) {
+    const { error } = await supabaseClient
+      .from("jury_remarks")
+      .delete()
+      .eq("group_id", groupId)
+      .eq("jury_name", state.juryName);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("jury_remarks")
+    .upsert({ group_id: groupId, jury_name: state.juryName, remark: clean }, { onConflict: "group_id,jury_name" });
+  if (error) throw error;
+}
+
+function juryMarkPickerView(criterion, value) {
+  const max = 10;
+  const selected = value === null || value === undefined || value === "" ? "" : Number(value);
+  const values = Array.from({ length: max + 1 }, (_, index) => index);
+
+  return `<div class="mark-picker">
+    <label>${esc(criterion.label)}${criterion.bonus ? `<span class="ai-badge bonus-badge">Bonus · not counted in base 70</span>` : ""} <small class="optional">Choose from 0 to ${max}</small></label>
+    <p class="question-hint">${esc(criterion.prompt)}</p>
+    <div class="mark-chips" aria-label="Score buttons for ${esc(criterion.label)}">
+      ${values.map(item => `<button type="button" class="mark-chip ${selected === item ? "active" : ""}" data-jury-mark-value="${item}" data-jury-criterion="${esc(criterion.key)}">${item}</button>`).join("")}
+    </div>
+    <input type="hidden" name="score::${esc(criterion.key)}" value="${selected === "" ? "" : selected}" data-jury-score-input="${esc(criterion.key)}">
+  </div>`;
+}
+
+function juryOfficeScoreboardView(office) {
+  const groups = juryGroupsForOffice(office);
+  const maxBase = juryBaseCriteria().length * 10;
+  const rows = groups
+    .map(group => ({ group, base: juryGroupBaseTotal(group.id), bonus: juryGroupBonus(group.id) }))
+    .sort((a, b) => (b.base + b.bonus) - (a.base + a.bonus));
+
+  return `<article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">${esc(office)} scoreboard</p><h2>${rows[0] && rows[0].base > 0 ? `${esc(rows[0].group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${maxBase} base + 10 bonus</span></div><div class="scoreboard-list">${rows.map((row, index) => `<div class="${index === 0 && row.base > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><meter min="0" max="${maxBase}" value="${row.base}"></meter><b>${row.base}/${maxBase} <span class="bonus-tag">+${row.bonus} bonus</span></b></div>`).join("")}</div></article>`;
+}
+
+const juryFirstName = (name = "") => String(name).replace(/\(.*?\)/g, "").trim().split(/\s+/)[0] || name;
+
+function juryNameView() {
+  shell(`<main class="page simple-page"><nav class="journey" aria-label="Jury steps"><span class="active">1 <b>Jury member</b></span><i></i><span>2 <b>Office</b></span><i></i><span>3 <b>Score groups</b></span></nav><section class="mentor-choice"><p class="eyebrow orange-eyebrow">Mada Jury</p><h1>Choose your name</h1><p>Tap your name below. We’ll remember it on this device.</p><div class="mentor-tabs" aria-label="Jury members">${juryMembersSeed.map(member => `<button class="mentor-tab ${state.juryName === member.name ? "active" : ""}" data-jury-name="${esc(member.name)}"><span>${esc(member.name.slice(0, 1))}</span>${esc(juryFirstName(member.name))}<small class="optional">${esc(member.office)} office</small></button>`).join("")}</div></section></main>`);
+}
+
+function juryOfficeView() {
+  shell(`<main class="page simple-page"><nav class="journey" aria-label="Jury steps"><span class="done">✓ <b>Jury member</b></span><i></i><span class="active">2 <b>Office</b></span><i></i><span>3 <b>Score groups</b></span></nav><section class="mentor-choice"><p class="eyebrow orange-eyebrow">Mada Jury · ${esc(state.juryName)}</p><h1>Choose an office</h1><p>We couldn't find your office automatically — pick it below.</p></section><div class="status-row jury-office-row">${juryOffices.map(office => `<button class="status jury-office-card ${state.activeJuryOffice === office ? "selected" : ""}" data-jury-office="${esc(office)}"><strong>${esc(office)}</strong><small>${juryGroupsForOffice(office).length} group(s)</small></button>`).join("")}</div><p class="help-line"><button class="back-link" data-action="jury-change-name">← Change jury name</button></p></main>`);
+}
+
+function juryGroupListView() {
+  const office = state.activeJuryOffice;
+  const groups = juryGroupsForOffice(office);
+  shell(`<main class="page simple-page"><nav class="journey" aria-label="Jury steps"><span class="done">✓ <b>Jury member</b></span><i></i><span class="done">✓ <b>${esc(office)}</b></span><i></i><span class="active">3 <b>Score groups</b></span></nav><section class="group-heading"><div><span class="selected-mentor"><i>${esc(state.juryName.slice(0, 1))}</i> Judging as <strong>${esc(state.juryName)}</strong> · ${esc(office)}</span><h2>Choose a group</h2></div><div class="status-key"><span><i class="new"></i>Not started</span><span><i class="started"></i>In progress</span><span><i class="complete"></i>Complete</span></div></section><section class="group-list">${groups.map(group => {
+    const complete = juryGroupComplete(group.id);
+    const anyScore = juryGroupAnyScore(group.id);
+    const tone = complete ? "complete" : anyScore ? "started" : "new";
+    const label = complete ? "Complete" : anyScore ? "In progress" : "Not started";
+    const topicEntry = juryGroupTopic(group.id);
+    const topicTitle = topicEntry ? (juryTopics.find(t => t.id === topicEntry.topicId)?.title || "Unknown topic") : "No topic chosen yet";
+    return `<button class="group-row" data-jury-group="${group.id}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small>${group.participants.length} participant(s) · ${esc(topicTitle)}</small></span><span class="group-status ${tone}"><i></i>${label}<small>${juryGroupBaseTotal(group.id)}/${juryBaseCriteria().length * 10} base</small></span><span class="row-arrow">→</span></button>`;
+  }).join("")}</section>${juryOfficeScoreboardView(office)}<p class="help-line"><button class="back-link" data-action="jury-change-name">← Change jury name</button></p></main>`);
+}
+
+function juryGroupView(groupId) {
+  const group = juryGroupById(groupId);
+  if (!group) return juryGroupListView();
+  if (state.activeJuryOffice !== group.office) {
+    state.activeJuryOffice = group.office;
+    saveLocal();
+  }
+
+  const office = group.office;
+  const topicEntry = juryGroupTopic(group.id);
+  const myRemark = state.juryRemarks[juryRemarkKeyFor(group.id, state.juryName)]?.remark || "";
+  const baseTotal = juryGroupBaseTotal(group.id);
+  const bonusTotal = juryGroupBonus(group.id);
+  const maxBase = juryBaseCriteria().length * 10;
+
+  shell(`<main class="page guided-review"><nav class="journey" aria-label="Jury steps"><span class="done">✓ <b>Jury member</b></span><i></i><span class="done">✓ <b>${esc(office)}</b></span><i></i><span class="active">3 <b>${esc(group.name)}</b></span></nav><div class="review-toolbar"><button class="back-link" data-action="jury-back-groups">← Change group</button><div class="question-progress"><span>${esc(group.name)}</span><div><i style="width:${Math.min(100, maxBase ? (baseTotal / maxBase) * 100 : 0)}%"></i></div></div><span class="autosave-note">${baseTotal}/${maxBase} base + ${bonusTotal}/10 bonus</span></div><section class="workflow"><form id="jury-group-form" data-jury-group="${group.id}"><article class="card question-card"><p class="eyebrow">${esc(group.name)} · Judging as ${esc(state.juryName)}</p><h1>${esc(group.name)}</h1><p class="subtle">Participants: ${group.participants.map(esc).join(", ")}</p><div class="section-label"><span>1</span><div><strong>Project topic</strong><small>Editable any time by any jury member</small></div></div><div class="status-row jury-topic-row">${juryTopics.map(topic => `<button type="button" class="status jury-topic-card ${topicEntry?.topicId === topic.id ? "selected" : ""}" data-jury-topic="${topic.id}"><strong>Topic ${topic.id}</strong><small>${esc(topic.title)}</small></button>`).join("")}</div><input type="hidden" name="topicId" value="${topicEntry?.topicId || ""}" data-jury-topic-input><div class="section-label"><span>2</span><div><strong>Score the criteria</strong><small>0–10 per criterion, plus a separate bonus score</small></div></div>${juryCriteria.map(criterion => juryMarkPickerView(criterion, state.juryScores[juryScoreKey(group.id, criterion.key)]?.score)).join("")}<label>Overall remark <small class="optional">Optional — your own note, visible to other jury members</small><textarea class="compact" name="remark" placeholder="Overall impression of this group's project…">${esc(myRemark)}</textarea></label></article><div class="sticky-actions"><button class="secondary" type="button" data-action="jury-back-groups">Back</button><button class="primary" type="submit">Save scores</button></div></form></section>${juryOfficeScoreboardView(office)}</main>`);
+}
+
+function juryRouter() {
+  const path = location.hash.replace(/^#jury\/?/, "");
+  const parts = path.split("/").filter(Boolean);
+  if (!state.juryName) return juryNameView();
+  // Office is known from the jury member's own record — no separate picker step.
+  if (!state.activeJuryOffice) {
+    state.activeJuryOffice = juryMembersSeed.find(member => member.name === state.juryName)?.office || null;
+    saveLocal();
+  }
+  if (!state.activeJuryOffice) return juryOfficeView();
+  if (parts[0] === "group" && parts[1]) return juryGroupView(Number(parts[1]));
+  return juryGroupListView();
+}
+
 const allParticipants = () => state.data.groups.flatMap(group => group.participants.map(person => ({ group, person })));
 const normalizePhotoName = value => String(value || "")
   .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[̀-ͯ]/g, "")
   .replace(/\.[^.]+$/g, "")
   .replace(/[^a-z0-9]+/gi, "")
   .toLowerCase();
@@ -881,6 +1207,7 @@ function scheduleRefresh() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     saveLocal();
+    if (location.hash.startsWith("#jury")) return;
     const formOpen = Boolean(document.querySelector("#group-review-form"));
     if (location.hash === "#admin" && state.session?.role === "admin") {
       adminDashboard(lastAdminMentor);
@@ -1120,10 +1447,14 @@ async function clearRecentChangesAsAdmin() {
 
 function shell(content) {
   const { name, role } = state.session;
+  const inJury = location.hash.startsWith("#jury");
   const accountControls = role === "admin"
     ? `<span>${esc(name)}</span><span class="role">Admin</span><span class="role sync-pill">${esc(syncLabel())}</span><button class="ghost" data-action="logout">Log out</button>`
     : `<span class="role">Spoon mentor form</span><span class="role sync-pill">${esc(syncLabel())}</span><button class="ghost" data-action="admin-login">Admin</button>`;
-  app.innerHTML = `<div class="shell"><header class="topbar"><div class="brand"><img class="spoon-logo" src="https://spoonconsulting.com/wp-content/uploads/elementor/thumbs/Logo-Spoon-Spoon-Consulting-2024-scaled-rah72gsdflipzz9bau5ypzlaz4ldjbb0h0vj24z8x8.webp" alt="Spoon Consulting"><span class="product-name">Hackathon Review Hub</span></div><div class="userbox">${accountControls}</div></header>${content}</div>`;
+  const juryNav = inJury
+    ? `<button class="ghost" data-action="jury-exit">← Group correction</button>`
+    : `<button class="ghost" data-action="jury-home">Mada Jury</button>`;
+  app.innerHTML = `<div class="shell"><header class="topbar"><div class="brand"><img class="spoon-logo" src="https://spoonconsulting.com/wp-content/uploads/elementor/thumbs/Logo-Spoon-Spoon-Consulting-2024-scaled-rah72gsdflipzz9bau5ypzlaz4ldjbb0h0vj24z8x8.webp" alt="Spoon Consulting"><span class="product-name">Hackathon Review Hub</span></div><div class="userbox">${juryNav}${accountControls}</div></header>${content}</div>`;
 }
 
 function loginView(message = "") {
@@ -1300,6 +1631,7 @@ function openPublicForm() {
 }
 
 function dashboard() {
+  if (location.hash.startsWith("#jury")) return juryRouter();
   if (location.hash === "#admin") return state.session?.role === "admin" ? adminDashboard(lastAdminMentor) : loginView();
   openPublicForm();
 }
@@ -1392,6 +1724,32 @@ document.addEventListener("submit", async event => {
 
     if (data.destination === "dashboard" || qid === state.data.questions.length) mentorDashboard();
     else correctionView(group.id, qid + 1);
+  }
+
+  if (event.target.id === "jury-group-form") {
+    const groupId = Number(event.target.dataset.juryGroup);
+    const data = Object.fromEntries(new FormData(event.target));
+    const topicId = data.topicId ? Number(data.topicId) : null;
+
+    const scoresByKey = {};
+    juryCriteria.forEach(criterion => {
+      const raw = data[`score::${criterion.key}`];
+      if (raw !== undefined && raw !== "") {
+        scoresByKey[criterion.key] = Math.max(0, Math.min(10, Math.round(Number(raw))));
+      }
+    });
+
+    try {
+      if (topicId) await persistJuryTopic(groupId, topicId);
+      if (Object.keys(scoresByKey).length) await persistJuryScores(groupId, scoresByKey);
+      await persistJuryRemark(groupId, data.remark || "");
+      showToast(remoteEnabled() ? "✓ Jury scores saved to Supabase" : "✓ Jury scores saved locally");
+    } catch (error) {
+      console.error("Jury save failed", error);
+      showToast(error.message ? `Jury sync failed: ${error.message}` : "Saved locally, but Supabase sync failed.");
+    }
+
+    juryGroupView(groupId);
   }
 });
 
@@ -1510,6 +1868,64 @@ document.addEventListener("click", async event => {
 
     adminDashboard(lastAdminMentor);
   }
+
+  if (button.dataset.action === "jury-home") {
+    location.hash = "jury";
+    dashboard();
+    return;
+  }
+  if (button.dataset.action === "jury-exit") {
+    location.hash = "";
+    dashboard();
+    return;
+  }
+  if (button.dataset.action === "jury-change-name") {
+    state.juryName = null;
+    state.activeJuryOffice = null;
+    saveLocal();
+    location.hash = "jury";
+    dashboard();
+    return;
+  }
+  if (button.dataset.action === "jury-back-groups") {
+    location.hash = "jury";
+    dashboard();
+    return;
+  }
+  if (button.dataset.juryName) {
+    state.juryName = button.dataset.juryName;
+    state.activeJuryOffice = juryMembersSeed.find(member => member.name === state.juryName)?.office || null;
+    saveLocal();
+    location.hash = "jury";
+    dashboard();
+    return;
+  }
+  if (button.dataset.juryOffice) {
+    state.activeJuryOffice = button.dataset.juryOffice;
+    saveLocal();
+    location.hash = "jury";
+    dashboard();
+    return;
+  }
+  if (button.dataset.juryGroup) {
+    location.hash = `jury/group/${button.dataset.juryGroup}`;
+    dashboard();
+    return;
+  }
+  if (button.dataset.juryTopic) {
+    const form = button.closest("form");
+    const input = form?.querySelector("[data-jury-topic-input]");
+    if (input) input.value = button.dataset.juryTopic;
+    form?.querySelectorAll(".jury-topic-card").forEach(card => card.classList.toggle("selected", card === button));
+    return;
+  }
+  if (button.dataset.juryMarkValue !== undefined && button.dataset.juryCriterion) {
+    const picker = button.closest(".mark-picker");
+    const input = picker?.querySelector(`[data-jury-score-input="${button.dataset.juryCriterion}"]`);
+    if (input) input.value = button.dataset.juryMarkValue;
+    picker?.querySelectorAll(".mark-chip").forEach(chip => chip.classList.toggle("active", chip === button));
+    return;
+  }
 });
 
 document.addEventListener("change", event => {
@@ -1535,7 +1951,9 @@ async function boot() {
   if (!isAdmin && (!state.session || state.session.role === "admin")) state.session = { name: state.activeMentor, role: "mentor" };
   dashboard();
   await loadSharedData({ includeAdminData: isAdmin });
+  await loadJuryData();
   subscribeSharedData();
+  subscribeJuryData();
   dashboard();
 }
 
