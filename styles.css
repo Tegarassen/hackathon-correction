@@ -608,3 +608,7 @@ img.participant-photo { background:#dceaf2; }
   .mini-individual-notes .participant-name-block { grid-template-columns:40px minmax(0,1fr); gap:8px; font-size:12px; }
   .mini-individual-notes .participant-photo.small { width:40px; height:40px; }
 }
+
+/* Bare "page not found" screen — no topbar, no buttons, just a centered message. */
+.not-found-page { display:grid; place-items:center; min-height:100vh; text-align:center; padding:24px; }
+.not-found-page .mentor-choice { max-width:480px; margin:0; }
