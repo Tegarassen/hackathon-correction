@@ -106,19 +106,12 @@ const madaTopics = [
     bonus: "Use AI to help citizens understand outage patterns and get plain-language guidance during water or power cuts."
   }
 ];
-const madaCriteria = [
-  { key: "usability", label: "Usability", max: 10, prompt: "Is the app easy to use during urgent cyclone/emergency situations?" },
-  { key: "content", label: "Content", max: 10, prompt: "Is the disaster information accurate, simple, practical, and relevant to Madagascar?" },
-  { key: "interactivity", label: "Interactivity", max: 10, prompt: "Are users able to check alerts, complete emergency checklists, report damages, or find shelters on a map?" },
-  { key: "design", label: "Design", max: 10, prompt: "Is the app visually clear, serious, accessible, and suitable for emergency communication?" },
-  { key: "performance", label: "Performance", max: 10, prompt: "Does the app load quickly and work well on mobile devices? (Also consider whether a backend stores cyclone alerts, shelter locations, emergency contacts, and citizen reports.)" },
-  { key: "innovation", label: "Innovation", max: 10, prompt: "Does the app offer a useful and creative way to help citizens before, during, and after cyclones?" },
-  { key: "collaboration", label: "Collaboration", max: 10, prompt: "Were effective collaboration tools and practices used during development?" },
-  { key: "bonus_ai", label: "Bonus — AI integration", max: 10, prompt: "Integrate AI to explain cyclone warnings in simple language and generate personalised safety advice for families, students, elderly people, and people living in high-risk areas.", bonus: true }
-];
-const madaBaseCriteria = madaCriteria.filter(criterion => !criterion.bonus);
-const madaBonusCriterion = madaCriteria.find(criterion => criterion.bonus);
-const madaBaseTotal = madaBaseCriteria.reduce((sum, item) => sum + item.max, 0);
+// Spoon Madagascar mini-project scoring intentionally mirrors Mauritius exactly — the
+// same 7 criteria object, the same max marks per criterion, and the same combined
+// total (the AI criterion counts toward the total, it is not tracked separately),
+// so both events are judged on an identical scale.
+const madaCriteria = miniProjectCriteria;
+const madaProjectTotal = miniProjectTotal;
 
 let state = JSON.parse(localStorage.getItem("spoon-state-v2") || "null") || {};
 state = {
@@ -237,23 +230,17 @@ const miniProjectAverage = group => {
 const combinedScoreboard = () => state.data.groups
   .map(group => ({ group, hackathon: groupScore(group), hackathonMax: knownTotalMarks(), mini: miniProjectAverage(group), miniMax: miniProjectTotal, total: groupScore(group) + miniProjectAverage(group), max: knownTotalMarks() + miniProjectTotal, juryCount: miniReviewsForGroup(group).length }))
   .sort((a, b) => b.total - a.total);
-const madaCriterionScore = (scores = {}, criterion) => normalizeMark(scores?.[criterion.key], criterion.max);
+const madaCriterionScore = miniCriterionScore;
 const madaReviewsForGroup = group => Object.values(state.madaReviews).filter(review => Number(review.groupId) === Number(group.id));
-const madaBaseScore = review => madaBaseCriteria.reduce((sum, criterion) => sum + (madaCriterionScore(review?.scores, criterion) || 0), 0);
-const madaBonusScore = review => madaCriterionScore(review?.scores, madaBonusCriterion) || 0;
+const madaProjectScore = review => miniProjectScore(review);
 const madaGroupAverage = group => {
   const reviews = madaReviewsForGroup(group);
   if (!reviews.length) return 0;
-  return Math.round((reviews.reduce((sum, review) => sum + madaBaseScore(review), 0) / reviews.length) * 10) / 10;
-};
-const madaBonusAverage = group => {
-  const reviews = madaReviewsForGroup(group);
-  if (!reviews.length) return 0;
-  return Math.round((reviews.reduce((sum, review) => sum + madaBonusScore(review), 0) / reviews.length) * 10) / 10;
+  return Math.round((reviews.reduce((sum, review) => sum + madaProjectScore(review), 0) / reviews.length) * 10) / 10;
 };
 const madaScoreboard = () => madaGroupsSeed
-  .map(group => ({ group, base: madaGroupAverage(group), baseMax: madaBaseTotal, bonus: madaBonusAverage(group), bonusMax: madaBonusCriterion.max, juryCount: madaReviewsForGroup(group).length }))
-  .sort((a, b) => b.base - a.base);
+  .map(group => ({ group, average: madaGroupAverage(group), max: madaProjectTotal, juryCount: madaReviewsForGroup(group).length }))
+  .sort((a, b) => b.average - a.average);
 
 const answerGuides = {
   1: {
@@ -1613,7 +1600,7 @@ async function persistMadaReview(group, formData) {
       group_name: group.name,
       jury_name: state.activeMadaJury,
       scores,
-      total_score: madaBaseCriteria.reduce((sum, criterion) => sum + (scores[criterion.key] || 0), 0),
+      total_score: madaCriteria.reduce((sum, criterion) => sum + (scores[criterion.key] || 0), 0),
       group_note: formData.groupNote || "",
       individual_notes: individualNotes
     }, { onConflict: "group_id,jury_name" });
@@ -2009,7 +1996,7 @@ async function persistMadaReviewAsAdmin(review) {
       group_name: cleanReview.groupName,
       jury_name: cleanReview.juryName,
       scores: cleanReview.scores,
-      total_score: madaBaseScore(cleanReview),
+      total_score: madaProjectScore(cleanReview),
       group_note: cleanReview.groupNote,
       individual_notes: cleanReview.individualNotes
     }, { onConflict: "group_id,jury_name" });
@@ -2078,13 +2065,6 @@ function criteriaSelectView(criterion, value = "") {
 function miniTopicBriefView(topic) {
   if (!topic) return `<div class="mini-topic-brief empty">No project title assigned yet. Ask an admin to choose Smart Budget, Health Alert, or Water Wise for this group.</div>`;
   return `<details class="mini-topic-brief"><summary><span>Project brief</span><b>${esc(topicFullTitle(topic))}</b></summary><p>${esc(topic.brief)}</p><p><strong>Bonus AI:</strong> ${esc(topic.bonus)}</p></details>`;
-}
-
-function madaCriterionView(criterion, value) {
-  const normalized = normalizeMark(value, criterion.max);
-  const selected = normalized === null ? "" : Math.round(normalized);
-  const options = Array.from({ length: criterion.max + 1 }, (_, index) => index);
-  return `<div class="criterion-card ${selected !== "" ? "scored" : ""}" data-criteria-max="${criterion.max}"><div class="criterion-copy"><div class="criterion-title-row"><strong>${esc(criterion.label)}</strong><span>${selected !== "" ? `${selected}/${criterion.max}` : `Not scored /${criterion.max}`}</span></div><p>${esc(criterion.prompt)}</p></div><label class="criteria-select-panel"><small>Score / ${criterion.max}</small><select name="${esc(criterion.key)}"><option value="">—</option>${options.map(item => `<option value="${item}" ${selected === item ? "selected" : ""}>${item}</option>`).join("")}</select></label></div>`;
 }
 
 function madaTopicBriefView(topic) {
@@ -2191,7 +2171,7 @@ function madaJuryLanding() {
   state.madaJuryView = "landing";
   state.activeMadaGroup = null;
   saveLocal();
-  shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero centered"><p class="eyebrow orange-eyebrow">Spoon Madagascar jury</p><h1>Choose your jury name</h1><p>Score each group out of ${madaBaseTotal} base marks, plus a separate AI bonus out of ${madaBonusCriterion.max}. Pick your name — we'll show only the groups from your home office.</p><span class="mini-jury-score-chip">${madaBaseTotal} + ${madaBonusCriterion.max} bonus marks</span></section><section class="mentor-choice mini-jury-choice">${madaJuryTabs()}</section></main>`);
+  shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero centered"><p class="eyebrow orange-eyebrow">Spoon Madagascar jury</p><h1>Choose your jury name</h1><p>Score each group out of ${madaProjectTotal} marks — the same criteria and scale as the Mauritius mini-project jury. Pick your name — we'll show only the groups from your home office.</p><span class="mini-jury-score-chip">${madaProjectTotal} marks total</span></section><section class="mentor-choice mini-jury-choice">${madaJuryTabs()}</section></main>`);
 }
 
 function miniProjectDashboard() {
@@ -2209,7 +2189,7 @@ function madaJuryDashboard() {
   const office = madaJuryOffice(state.activeMadaJury);
   const groups = office ? madaGroupsForOffice(office) : [];
   const reviewedCount = groups.filter(group => state.madaReviews[madaReviewKey(group.id, state.activeMadaJury)]).length;
-  shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero split"><div><p class="eyebrow orange-eyebrow">Spoon Madagascar jury</p><h1>Choose a group</h1><p>Open a group, enter the criteria scores, and add a group note. Groups are limited to your home office.</p></div><aside class="mini-jury-profile"><span>${esc(madaFirstName(state.activeMadaJury || "J").slice(0, 1))}</span><strong>${esc(madaFirstName(state.activeMadaJury || "Jury"))}</strong><small class="mada-office-badge">${esc(office || "No office set")}</small><small>${reviewedCount}/${groups.length} groups scored</small><button class="secondary" data-action="mada-jury">Change jury</button></aside></section><section class="group-list mini-group-list">${groups.length ? groups.map(group => { const review = state.madaReviews[madaReviewKey(group.id, state.activeMadaJury)]; const score = madaBaseScore(review); const topic = madaTopicForGroup(group); return `<button class="group-row mini-group-row" data-mada-group="${group.id}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small class="mini-topic-line">${topic ? `<b>${esc(topic.title)}</b> — ${esc(topic.subtitle)}` : "No title assigned yet"}</small><small>${group.participants.length} participants</small></span><span class="group-status ${review ? "complete" : "new"}"><i></i>${review ? `${score}/${madaBaseTotal}` : "Start"}<small>${review ? "Edit review" : "Not scored yet"}</small></span><span class="row-arrow">→</span></button>`; }).join("") : `<p class="help-line">No groups found for your office yet. Ask an admin to check your jury record.</p>`}</section><p class="help-line">Admin combines Spoon Madagascar scores separately from the Mauritius scoreboard.</p></main>`);
+  shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero split"><div><p class="eyebrow orange-eyebrow">Spoon Madagascar jury</p><h1>Choose a group</h1><p>Open a group, enter the criteria scores, and add a group note. Groups are limited to your home office.</p></div><aside class="mini-jury-profile"><span>${esc(madaFirstName(state.activeMadaJury || "J").slice(0, 1))}</span><strong>${esc(madaFirstName(state.activeMadaJury || "Jury"))}</strong><small class="mada-office-badge">${esc(office || "No office set")}</small><small>${reviewedCount}/${groups.length} groups scored</small><button class="secondary" data-action="mada-jury">Change jury</button></aside></section><section class="group-list mini-group-list">${groups.length ? groups.map(group => { const review = state.madaReviews[madaReviewKey(group.id, state.activeMadaJury)]; const score = madaProjectScore(review); const topic = madaTopicForGroup(group); return `<button class="group-row mini-group-row" data-mada-group="${group.id}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small class="mini-topic-line">${topic ? `<b>${esc(topic.title)}</b> — ${esc(topic.subtitle)}` : "No title assigned yet"}</small><small>${group.participants.length} participants</small></span><span class="group-status ${review ? "complete" : "new"}"><i></i>${review ? `${score}/${madaProjectTotal}` : "Start"}<small>${review ? "Edit review" : "Not scored yet"}</small></span><span class="row-arrow">→</span></button>`; }).join("") : `<p class="help-line">No groups found for your office yet. Ask an admin to check your jury record.</p>`}</section><p class="help-line">Scored on the same ${madaProjectTotal}-point scale as the Mauritius mini-project.</p></main>`);
 }
 
 function miniProjectReviewView(groupId) {
@@ -2231,9 +2211,8 @@ function madaJuryReviewView(groupId) {
   saveLocal();
   const review = state.madaReviews[madaReviewKey(group.id, state.activeMadaJury)] || { scores: {} };
   const topic = madaTopicForGroup(group);
-  const baseScore = madaBaseScore(review);
-  const bonusScore = madaBonusScore(review);
-  shell(`<main class="page guided-review mini-review-page"><div class="mini-review-topbar"><div class="mini-review-left"><button class="back-link" data-action="mada-jury-dashboard">← Groups</button></div><div class="mini-review-title"><span>${esc(group.name)}</span><strong>${esc(topic?.title || "No title assigned")}</strong><small>${esc(madaFirstName(state.activeMadaJury || "Jury"))}</small>${topic ? `<em>${esc(topic.subtitle)}</em>` : ""}</div><div class="mini-review-meta"><div class="question-progress"><span>${baseScore}/${madaBaseTotal} + ${bonusScore} bonus</span><div><i style="width:${baseScore / madaBaseTotal * 100}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved" : "Not scored"}</span></div></div><section class="workflow mini-workflow"><form id="mada-review-form" data-mada-group="${group.id}">${madaTopicBriefView(topic)}<div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-card-strip"><strong>Criteria scores</strong><span>Whole numbers 0–10 · bonus tracked separately</span></div><div class="criteria-grid">${madaBaseCriteria.map(criterion => madaCriterionView(criterion, review.scores?.[criterion.key])).join("")}${madaCriterionView(madaBonusCriterion, review.scores?.[madaBonusCriterion.key])}</div></article><aside class="card mini-notes-card"><div class="mini-card-strip note-strip"><strong>Notes</strong><span>${group.participants.length} participants</span></div><div class="jury-note-panel important"><div><strong>Group note</strong></div><textarea name="groupNote" placeholder="Group strengths, weaknesses, reason behind score…">${esc(review.groupNote || "")}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes</strong></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="madaNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
+  const score = madaProjectScore(review);
+  shell(`<main class="page guided-review mini-review-page"><div class="mini-review-topbar"><div class="mini-review-left"><button class="back-link" data-action="mada-jury-dashboard">← Groups</button></div><div class="mini-review-title"><span>${esc(group.name)}</span><strong>${esc(topic?.title || "No title assigned")}</strong><small>${esc(madaFirstName(state.activeMadaJury || "Jury"))}</small>${topic ? `<em>${esc(topic.subtitle)}</em>` : ""}</div><div class="mini-review-meta"><div class="question-progress"><span>${score}/${madaProjectTotal} selected</span><div><i style="width:${madaProjectTotal ? (score / madaProjectTotal * 100) : 0}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved" : "Not scored"}</span></div></div><section class="workflow mini-workflow"><form id="mada-review-form" data-mada-group="${group.id}">${madaTopicBriefView(topic)}<div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-card-strip"><strong>Criteria scores</strong><span>Half marks allowed · same criteria as the Mauritius mini-project</span></div><div class="criteria-grid">${madaCriteria.map(criterion => criteriaSelectView(criterion, madaCriterionScore(review.scores, criterion))).join("")}</div></article><aside class="card mini-notes-card"><div class="mini-card-strip note-strip"><strong>Notes</strong><span>${group.participants.length} participants</span></div><div class="jury-note-panel important"><div><strong>Group note</strong></div><textarea name="groupNote" placeholder="Group strengths, weaknesses, reason behind score…">${esc(review.groupNote || "")}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes</strong></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="madaNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
 }
 
 function correctionView(groupId, qid = 1) {
@@ -2381,7 +2360,7 @@ function madaReviewEditorView() {
 
   return `<article class="card report-card admin-mini-editor-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar admin editor</p><h2>Edit or remove jury feedback</h2><p class="subtle">Change criteria points or delete a full jury feedback entry.</p></div><span class="ai-badge">${reviews.length} review${reviews.length === 1 ? "" : "s"}</span></div><div class="admin-mini-editor-list">${reviews.map(review => {
     const group = madaGroupById(review.groupId);
-    return `<form class="admin-mada-review-form" data-mada-group="${esc(review.groupId)}" data-mada-jury="${esc(review.juryName)}"><div class="admin-mini-editor-head"><div><p class="eyebrow">${esc(group?.name || review.groupName || `Group ${review.groupId}`)}</p><h3>${esc(madaFirstName(review.juryName))} feedback</h3><small>${madaBaseScore(review)}/${madaBaseTotal} base · ${madaBonusScore(review)}/${madaBonusCriterion.max} bonus</small></div><div class="admin-mini-actions"><button class="danger-mini" type="button" data-delete-mada-review="${esc(review.groupId)}|${esc(review.juryName)}">Delete feedback</button><button class="primary" type="submit">Save changes</button></div></div><div class="admin-mini-score-grid">${madaCriteria.map(criterion => `<label><span>${esc(criterion.label)} <b>/${criterion.max}</b></span><input type="number" min="0" max="${criterion.max}" step="1" name="${esc(criterion.key)}" value="${esc(madaCriterionScore(review.scores, criterion) || 0)}"></label>`).join("")}</div><label class="admin-mini-note-wide"><span>Group note</span><textarea name="groupNote" placeholder="Group-level feedback...">${esc(review.groupNote || "")}</textarea></label>${(group?.participants || []).length ? `<div class="admin-mini-notes-grid">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea name="madaNote::${esc(person)}" placeholder="Individual note...">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div>` : ""}</form>`;
+    return `<form class="admin-mada-review-form" data-mada-group="${esc(review.groupId)}" data-mada-jury="${esc(review.juryName)}"><div class="admin-mini-editor-head"><div><p class="eyebrow">${esc(group?.name || review.groupName || `Group ${review.groupId}`)}</p><h3>${esc(madaFirstName(review.juryName))} feedback</h3><small>${madaProjectScore(review)}/${madaProjectTotal} points</small></div><div class="admin-mini-actions"><button class="danger-mini" type="button" data-delete-mada-review="${esc(review.groupId)}|${esc(review.juryName)}">Delete feedback</button><button class="primary" type="submit">Save changes</button></div></div><div class="admin-mini-score-grid">${madaCriteria.map(criterion => `<label><span>${esc(criterion.label)} <b>/${criterion.max}</b></span><input type="number" min="0" max="${criterion.max}" step="0.5" name="${esc(criterion.key)}" value="${esc(madaCriterionScore(review.scores, criterion) || 0)}"></label>`).join("")}</div><label class="admin-mini-note-wide"><span>Group note</span><textarea name="groupNote" placeholder="Group-level feedback...">${esc(review.groupNote || "")}</textarea></label>${(group?.participants || []).length ? `<div class="admin-mini-notes-grid">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea name="madaNote::${esc(person)}" placeholder="Individual note...">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div>` : ""}</form>`;
   }).join("")}</div></article>`;
 }
 
@@ -2406,13 +2385,12 @@ function buildMadaGroupSummary(group) {
   const topic = madaTopicForGroup(group);
   const topicCopy = topic ? `Project: ${madaTopicFullTitle(topic)}. ` : "";
   if (!reviews.length) return `${topicCopy}No Spoon Madagascar jury feedback has been submitted yet.`;
-  const base = madaGroupAverage(group);
-  const bonus = madaBonusAverage(group);
+  const average = madaGroupAverage(group);
   const juryDetails = reviews
     .slice()
     .sort((a, b) => String(a.juryName).localeCompare(String(b.juryName)))
-    .map(review => `${esc(madaFirstName(review.juryName || "Jury"))}: ${madaBaseScore(review)}/${madaBaseTotal} base + ${madaBonusScore(review)}/${madaBonusCriterion.max} bonus${review.groupNote ? ` — ${review.groupNote}` : ""}`);
-  return `${topicCopy}Average score: ${base}/${madaBaseTotal} base, ${bonus}/${madaBonusCriterion.max} bonus, from ${reviews.length} jury member(s). ${juryDetails.join(" · ")}`;
+    .map(review => `${esc(madaFirstName(review.juryName || "Jury"))}: ${madaProjectScore(review)}/${madaProjectTotal}${review.groupNote ? ` — ${review.groupNote}` : ""}`);
+  return `${topicCopy}Average score: ${average}/${madaProjectTotal} from ${reviews.length} jury member(s). ${juryDetails.join(" · ")}`;
 }
 
 function buildMadaPersonFeedback(person) {
@@ -2426,9 +2404,8 @@ function buildMadaPersonFeedback(person) {
 function madaDetailedGroupCardsView() {
   return madaGroupsSeed.map(group => {
     const topic = madaTopicForGroup(group);
-    const base = madaGroupAverage(group);
-    const bonus = madaBonusAverage(group);
-    return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office)}</p><h2>Group summary</h2>${topic ? `<p class="subtle">${esc(madaTopicFullTitle(topic))}</p>` : ""}</div><span class="ai-badge">${base}/${madaBaseTotal} + ${bonus} bonus</span></div><p class="summary-text">${esc(state.reports[`mada-group|${group.id}`] || buildMadaGroupSummary(group))}</p><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`mada-person|${person}`] || buildMadaPersonFeedback(person))}</p></div>`).join("")}</div></article>`;
+    const average = madaGroupAverage(group);
+    return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office)}</p><h2>Group summary</h2>${topic ? `<p class="subtle">${esc(madaTopicFullTitle(topic))}</p>` : ""}</div><span class="ai-badge">${average}/${madaProjectTotal}</span></div><p class="summary-text">${esc(state.reports[`mada-group|${group.id}`] || buildMadaGroupSummary(group))}</p><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`mada-person|${person}`] || buildMadaPersonFeedback(person))}</p></div>`).join("")}</div></article>`;
   }).join("");
 }
 
@@ -2465,7 +2442,7 @@ function madaAdminPage() {
   const scoreRows = madaScoreboard();
   const leader = scoreRows[0];
   const generatedCount = Object.keys(state.reports).filter(key => key.startsWith("mada-group|") || key.startsWith("mada-person|")).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroupsSeed.length}</strong><span>Groups</span></div><div class="stat"><strong>${madaBaseTotal + madaBonusCriterion.max}</strong><span>Combined total marks</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaBaseTotal} base + ${madaBonusCriterion.max} bonus marks</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.base > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>Base ${row.base}/${row.baseMax} · Bonus ${row.bonus}/${row.bonusMax}</small><meter min="0" max="${row.baseMax || 1}" value="${row.base}"></meter><b>${row.base}/${row.baseMax}</b></div>`).join("")}</div></article>${madaDetailedGroupCardsView()}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroupsSeed.length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${madaDetailedGroupCardsView()}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
 }
 
 function buildPersonFeedback(person) {
@@ -3099,6 +3076,9 @@ document.addEventListener("change", event => {
     }
     queueMiniProjectAutosave(event.target.closest("#mini-project-form"), 600);
   }
+  if (event.target.closest("#mada-review-form") && event.target.matches("[data-criteria-input]")) {
+    sanitizeCriteriaInput(event.target);
+  }
   if (event.target.matches("[data-mark-select]")) {
     const picker = event.target.closest(".mark-picker");
     picker?.querySelectorAll(".mark-chip").forEach(chip => chip.classList.toggle("active", chip.dataset.markValue === event.target.value));
@@ -3113,6 +3093,9 @@ document.addEventListener("change", event => {
 });
 
 document.addEventListener("input", event => {
+  if (event.target.closest("#mada-review-form") && event.target.matches("[data-criteria-input]")) {
+    sanitizeCriteriaInput(event.target);
+  }
   const form = event.target.closest?.("#mini-project-form");
   if (!form) return;
   if (event.target.matches("[data-criteria-input]")) sanitizeCriteriaInput(event.target);
