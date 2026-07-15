@@ -65,61 +65,6 @@ const seed = {
   ]
 };
 
-const madaOffices = ["Diego", "Fina", "Tana"];
-const madaGroupsSeed = [
-  { id: 1, name: "Diego Group 1", office: "Diego", participants: ["ANDRY Nizwami Ibrahim", "RANAIVOSOA Edwino"] },
-  { id: 2, name: "Fina Group 1", office: "Fina", participants: ["ANDRITIANA Saotra Idealilalaina", "RAZAFINATOANDRO Ando Henri", "ANDRIANTSILAVINA Tsiferana Heritsilavo", "AMBOARAMPITIAVANA Nomena Sarobidy"] },
-  { id: 3, name: "Fina Group 2", office: "Fina", participants: ["RAKOTONIRINA Andrianina Laïscia", "BEMAZAVA julio", "RALAIVAO Ambinintsoa Francky", "VALISOAFANDRESENA Setraniaina Andriamampiandra"] },
-  { id: 4, name: "Tana Group 1", office: "Tana", participants: ["ANDRIANARIVONY Zo Michaël", "RAKOTOARISOA Andy Ny Rindra", "MBOLATSIORY Rihantiana Tiarintsoa", "VOLOLONIRINA Doris Sylvie", "RANDRIANARIVELO Stéphan"] },
-  { id: 5, name: "Tana Group 2", office: "Tana", participants: ["MAMPIONONA Njakarimanana Nerson", "RABENARIVO Ryan Lizka", "Rakotonirina Tahina Fanomezantsoa", "RAZAFIMAMY Antonino Iraky Ny Avo", "RATOVONJOELY Ny Ando Irintsoa"] }
-];
-const madaJuriesSeed = [
-  { name: "Jhonny Raherison", office: "Tana" },
-  { name: "Tojonirina Rarivoarison (Tojo)", office: "Tana" },
-  { name: "Gianna Ramasombazaha", office: "Tana" },
-  { name: "Joël Randrianarivelo", office: "Tana" },
-  { name: "Kintana Andriambololona", office: "Fina" },
-  { name: "Tovonirina Andrianarivelo (Tovo)", office: "Fina" },
-  { name: "Ya'sin Figuelia", office: "Diego" },
-  { name: "Hermeland Botrahaly", office: "Diego" }
-];
-const madaTopics = [
-  {
-    key: "cyclone_ready_mada",
-    title: "Cyclone Ready Mada",
-    subtitle: "Helping Citizens Prepare, Report, and Recover",
-    brief: "Design and implement an app that helps citizens in Madagascar prepare for cyclones, receive safety alerts, find nearby shelters, report damage, and access recovery information after disasters such as Cyclone Gezani and Cyclone Fytia.",
-    bonus: "Integrate AI to explain cyclone warnings in simple language and generate personalised safety advice for families, students, elderly people, and people living in high-risk areas."
-  },
-  {
-    key: "food_wise_madagascar",
-    title: "Food Wise Madagascar",
-    subtitle: "Understanding Food Prices and Hunger Risks",
-    brief: "Design and implement an app that helps citizens and authorities understand food prices and hunger risks across Madagascar.",
-    bonus: "Use AI to help citizens interpret food price trends and understand hunger-risk warnings in plain language."
-  },
-  {
-    key: "water_power_watch_mada",
-    title: "Water & Power Watch Mada",
-    subtitle: "Helping Citizens Track Service Cuts",
-    brief: "Design and implement an app that helps citizens track water and power service cuts across Madagascar.",
-    bonus: "Use AI to help citizens understand outage patterns and get plain-language guidance during water or power cuts."
-  }
-];
-const madaCriteria = [
-  { key: "usability", label: "Usability", max: 10, prompt: "Is the app easy to use during urgent cyclone/emergency situations?" },
-  { key: "content", label: "Content", max: 10, prompt: "Is the disaster information accurate, simple, practical, and relevant to Madagascar?" },
-  { key: "interactivity", label: "Interactivity", max: 10, prompt: "Are users able to check alerts, complete emergency checklists, report damages, or find shelters on a map?" },
-  { key: "design", label: "Design", max: 10, prompt: "Is the app visually clear, serious, accessible, and suitable for emergency communication?" },
-  { key: "performance", label: "Performance", max: 10, prompt: "Does the app load quickly and work well on mobile devices? (Also consider whether a backend stores cyclone alerts, shelter locations, emergency contacts, and citizen reports.)" },
-  { key: "innovation", label: "Innovation", max: 10, prompt: "Does the app offer a useful and creative way to help citizens before, during, and after cyclones?" },
-  { key: "collaboration", label: "Collaboration", max: 10, prompt: "Were effective collaboration tools and practices used during development?" },
-  { key: "bonus_ai", label: "Bonus — AI integration", max: 10, prompt: "Integrate AI to explain cyclone warnings in simple language and generate personalised safety advice for families, students, elderly people, and people living in high-risk areas.", bonus: true }
-];
-const madaBaseCriteria = madaCriteria.filter(criterion => !criterion.bonus);
-const madaBonusCriterion = madaCriteria.find(criterion => criterion.bonus);
-const madaBaseTotal = madaBaseCriteria.reduce((sum, item) => sum + item.max, 0);
-
 let state = JSON.parse(localStorage.getItem("spoon-state-v2") || "null") || {};
 state = {
   session: state.session || null,
@@ -133,13 +78,6 @@ state = {
   miniProjectAssignments: state.miniProjectAssignments || {},
   miniProjectView: state.miniProjectView || "landing",
   activeMiniGroup: state.activeMiniGroup || null,
-  madaJuries: state.madaJuries || madaJuriesSeed.map(j => j.name),
-  madaJuryOffices: state.madaJuryOffices || Object.fromEntries(madaJuriesSeed.map(j => [j.name, j.office])),
-  activeMadaJury: state.activeMadaJury || madaJuriesSeed[0]?.name || null,
-  madaReviews: state.madaReviews || {},
-  madaAssignments: state.madaAssignments || {},
-  madaJuryView: state.madaJuryView || "landing",
-  activeMadaGroup: state.activeMadaGroup || null,
   participantPhotos: state.participantPhotos || {},
   photoUrls: state.photoUrls || {},
   reports: state.reports || {},
@@ -152,13 +90,9 @@ if (!state.mentors?.length) state.mentors = defaultMentors;
 if (!state.mentors.includes(state.activeMentor)) state.activeMentor = state.mentors[0] || "Mentor";
 if (!state.juries?.length) state.juries = defaultJuries;
 if (!state.juries.includes(state.activeJury)) state.activeJury = state.juries[0] || "Jury";
-if (!state.madaJuries?.length) state.madaJuries = madaJuriesSeed.map(j => j.name);
-if (!state.madaJuries.includes(state.activeMadaJury)) state.activeMadaJury = state.madaJuries[0] || null;
-if (!state.madaJuryOffices || !Object.keys(state.madaJuryOffices).length) state.madaJuryOffices = Object.fromEntries(madaJuriesSeed.map(j => [j.name, j.office]));
 
 let lastAdminMentor = "all";
 let refreshTimer = null;
-let madaRefreshTimer = null;
 let miniAutosaveTimer = null;
 let miniAutosaveSignature = "";
 
@@ -170,24 +104,6 @@ const topicByKey = key => miniProjectTopics.find(topic => topic.key === key);
 const topicFullTitle = topic => topic ? `${topic.title}: ${topic.subtitle}` : "";
 const assignmentForGroup = group => state.miniProjectAssignments?.[String(group?.id)] || null;
 const topicForGroup = group => topicByKey(assignmentForGroup(group)?.topicKey);
-const madaGroupById = id => madaGroupsSeed.find(group => group.id === Number(id));
-const madaGroupsForOffice = office => madaGroupsSeed.filter(group => group.office === office);
-const madaTopicByKey = key => madaTopics.find(topic => topic.key === key);
-const madaTopicFullTitle = topic => topic ? `${topic.title}: ${topic.subtitle}` : "";
-const madaAssignmentForGroup = group => state.madaAssignments?.[String(group?.id)] || null;
-const madaTopicForGroup = group => madaTopicByKey(madaAssignmentForGroup(group)?.topicKey);
-const madaJuryOffice = name => state.madaJuryOffices?.[name] || madaJuriesSeed.find(j => j.name === name)?.office || null;
-const madaFirstName = name => String(name || "").replace(/\(.*?\)/g, "").trim().split(/\s+/)[0] || String(name || "");
-function madaReviewKey(groupId, juryName) {
-  return `${groupId}|${juryName}`;
-}
-function madaIndividualNotesFromForm(group, data = {}) {
-  return Object.fromEntries(
-    (group?.participants || [])
-      .map(person => [person, (data[`madaNote::${person}`] || "").trim()])
-      .filter(([, note]) => note)
-  );
-}
 const remoteEnabled = () => Boolean(supabaseClient);
 const adminAuthEnabled = () => remoteEnabled() && !cfg.demoMode;
 const knownTotalMarks = () => state.data.questions.reduce((sum, q) => sum + (Number(q.maxMarks) || 0), 0);
@@ -237,23 +153,6 @@ const miniProjectAverage = group => {
 const combinedScoreboard = () => state.data.groups
   .map(group => ({ group, hackathon: groupScore(group), hackathonMax: knownTotalMarks(), mini: miniProjectAverage(group), miniMax: miniProjectTotal, total: groupScore(group) + miniProjectAverage(group), max: knownTotalMarks() + miniProjectTotal, juryCount: miniReviewsForGroup(group).length }))
   .sort((a, b) => b.total - a.total);
-const madaCriterionScore = (scores = {}, criterion) => normalizeMark(scores?.[criterion.key], criterion.max);
-const madaReviewsForGroup = group => Object.values(state.madaReviews).filter(review => Number(review.groupId) === Number(group.id));
-const madaBaseScore = review => madaBaseCriteria.reduce((sum, criterion) => sum + (madaCriterionScore(review?.scores, criterion) || 0), 0);
-const madaBonusScore = review => madaCriterionScore(review?.scores, madaBonusCriterion) || 0;
-const madaGroupAverage = group => {
-  const reviews = madaReviewsForGroup(group);
-  if (!reviews.length) return 0;
-  return Math.round((reviews.reduce((sum, review) => sum + madaBaseScore(review), 0) / reviews.length) * 10) / 10;
-};
-const madaBonusAverage = group => {
-  const reviews = madaReviewsForGroup(group);
-  if (!reviews.length) return 0;
-  return Math.round((reviews.reduce((sum, review) => sum + madaBonusScore(review), 0) / reviews.length) * 10) / 10;
-};
-const madaScoreboard = () => madaGroupsSeed
-  .map(group => ({ group, base: madaGroupAverage(group), baseMax: madaBaseTotal, bonus: madaBonusAverage(group), bonusMax: madaBonusCriterion.max, juryCount: madaReviewsForGroup(group).length }))
-  .sort((a, b) => b.base - a.base);
 
 const answerGuides = {
   1: {
@@ -964,42 +863,6 @@ function removeMiniProjectAssignmentRow(row) {
   delete state.miniProjectAssignments[String(row.group_id)];
 }
 
-function applyMadaReviewRow(row) {
-  if (!row) return;
-  state.madaReviews[madaReviewKey(row.group_id, row.jury_name)] = {
-    groupId: row.group_id,
-    groupName: row.group_name,
-    juryName: row.jury_name,
-    scores: row.scores || {},
-    groupNote: row.group_note || "",
-    individualNotes: row.individual_notes || {},
-    updatedAt: row.updated_at,
-    remoteId: row.id
-  };
-}
-
-function removeMadaReviewRow(row) {
-  if (!row) return;
-  delete state.madaReviews[madaReviewKey(row.group_id, row.jury_name)];
-}
-
-function applyMadaAssignmentRow(row) {
-  if (!row) return;
-  const topic = madaTopicByKey(row.topic_key);
-  if (!topic) return;
-  state.madaAssignments[String(row.group_id)] = {
-    groupId: Number(row.group_id),
-    groupName: row.group_name || `Group ${row.group_id}`,
-    topicKey: row.topic_key,
-    updatedAt: row.updated_at
-  };
-}
-
-function removeMadaAssignmentRow(row) {
-  if (!row) return;
-  delete state.madaAssignments[String(row.group_id)];
-}
-
 function applyReportRow(row) {
   if (!row) return;
   state.reports[row.report_key] = row.content || "";
@@ -1032,19 +895,6 @@ function applyJuryRows(rows = []) {
   if (activeJuries.length) state.juries = activeJuries;
   if (!state.juries.includes(state.activeJury)) state.activeJury = state.juries[0] || "Jury";
   if (state.session?.role === "jury") state.session.name = state.activeJury;
-}
-
-function applyMadaJuryRows(rows = []) {
-  const activeMadaJuries = rows
-    .filter(row => row.active !== false)
-    .map(row => row.name)
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b));
-
-  if (activeMadaJuries.length) state.madaJuries = activeMadaJuries;
-  state.madaJuryOffices = Object.fromEntries(rows.filter(row => row.name && row.office).map(row => [row.name, row.office]));
-  if (!state.madaJuries.includes(state.activeMadaJury)) state.activeMadaJury = state.madaJuries[0] || null;
-  if (state.session?.role === "jury-mada") state.session.name = state.activeMadaJury;
 }
 
 async function addMentorAsAdmin(name) {
@@ -1150,86 +1000,6 @@ async function deleteJuryAsAdmin(name) {
   if (error) throw error;
 }
 
-async function addMadaJuryAsAdmin(name, office) {
-  if (state.session?.role !== "admin") throw new Error("Only admin can add Spoon Madagascar jury members.");
-  const cleanName = name.trim().replace(/\s+/g, " ");
-  const cleanOffice = madaOffices.includes(office) ? office : madaOffices[0];
-  if (!cleanName) throw new Error("Enter a jury name.");
-  if (state.madaJuries.some(jury => jury.toLowerCase() === cleanName.toLowerCase())) throw new Error("This jury member already exists.");
-
-  state.madaJuries = [...state.madaJuries, cleanName].sort((a, b) => a.localeCompare(b));
-  state.madaJuryOffices = { ...state.madaJuryOffices, [cleanName]: cleanOffice };
-  saveLocal();
-
-  if (!remoteEnabled()) return;
-
-  const { error } = await supabaseClient
-    .from("spoon_madagascar_juries")
-    .upsert({ name: cleanName, office: cleanOffice, active: true }, { onConflict: "name" });
-  if (error) throw error;
-}
-
-async function renameMadaJuryAsAdmin(oldName, newName, office) {
-  if (state.session?.role !== "admin") throw new Error("Only admin can rename Spoon Madagascar jury members.");
-  const cleanName = newName.trim().replace(/\s+/g, " ");
-  if (!oldName || !cleanName) throw new Error("Choose a jury member and enter the new name.");
-  const cleanOffice = madaOffices.includes(office) ? office : (state.madaJuryOffices?.[oldName] || madaOffices[0]);
-  if (oldName !== cleanName && state.madaJuries.some(jury => jury !== oldName && jury.toLowerCase() === cleanName.toLowerCase())) throw new Error("This jury name already exists.");
-
-  state.madaJuries = state.madaJuries.map(jury => jury === oldName ? cleanName : jury).sort((a, b) => a.localeCompare(b));
-  if (state.activeMadaJury === oldName) state.activeMadaJury = cleanName;
-  const nextMadaJuryOffices = { ...state.madaJuryOffices };
-  delete nextMadaJuryOffices[oldName];
-  nextMadaJuryOffices[cleanName] = cleanOffice;
-  state.madaJuryOffices = nextMadaJuryOffices;
-  Object.values(state.madaReviews).forEach(review => {
-    if (review.juryName === oldName) review.juryName = cleanName;
-  });
-  state.madaReviews = Object.fromEntries(Object.values(state.madaReviews).map(review => [madaReviewKey(review.groupId, review.juryName), review]));
-  saveLocal();
-
-  if (!remoteEnabled()) return;
-
-  const { error: upsertError } = await supabaseClient
-    .from("spoon_madagascar_juries")
-    .upsert({ name: cleanName, office: cleanOffice, active: true }, { onConflict: "name" });
-  if (upsertError) throw upsertError;
-
-  if (oldName !== cleanName) {
-    const { error: reviewError } = await supabaseClient
-      .from("spoon_madagascar_reviews")
-      .update({ jury_name: cleanName })
-      .eq("jury_name", oldName);
-    if (reviewError) throw reviewError;
-
-    const { error: deleteError } = await supabaseClient
-      .from("spoon_madagascar_juries")
-      .delete()
-      .eq("name", oldName);
-    if (deleteError) throw deleteError;
-  }
-}
-
-async function deleteMadaJuryAsAdmin(name) {
-  if (state.session?.role !== "admin") throw new Error("Only admin can delete Spoon Madagascar jury members.");
-  if (state.madaJuries.length <= 1) throw new Error("Keep at least one jury member.");
-
-  state.madaJuries = state.madaJuries.filter(jury => jury !== name);
-  const nextMadaJuryOffices = { ...state.madaJuryOffices };
-  delete nextMadaJuryOffices[name];
-  state.madaJuryOffices = nextMadaJuryOffices;
-  if (state.activeMadaJury === name) state.activeMadaJury = state.madaJuries[0] || null;
-  saveLocal();
-
-  if (!remoteEnabled()) return;
-
-  const { error } = await supabaseClient
-    .from("spoon_madagascar_juries")
-    .delete()
-    .eq("name", name);
-  if (error) throw error;
-}
-
 async function verifyAdminSession() {
   if (!adminAuthEnabled()) return false;
 
@@ -1294,7 +1064,7 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, juriesResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
+    const [mentorsResult, juriesResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       supabaseClient.from("juries").select("*").order("name", { ascending: true }),
       supabaseClient.from("mini_project_assignments").select("*").order("group_id", { ascending: true }),
@@ -1303,10 +1073,7 @@ async function loadSharedData(options = {}) {
       supabaseClient.from("mini_project_reviews").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("newbie_photos").select("*").order("updated_at", { ascending: false }),
       includeAdminData ? supabaseClient.from("ai_reports").select("*").order("generated_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
-      includeAdminData ? supabaseClient.from("change_history").select("*").order("changed_at", { ascending: false }).limit(50) : Promise.resolve({ data: [], error: null }),
-      supabaseClient.from("spoon_madagascar_juries").select("*").order("name", { ascending: true }),
-      supabaseClient.from("spoon_madagascar_assignments").select("*").order("group_id", { ascending: true }),
-      supabaseClient.from("spoon_madagascar_reviews").select("*").order("updated_at", { ascending: false })
+      includeAdminData ? supabaseClient.from("change_history").select("*").order("changed_at", { ascending: false }).limit(50) : Promise.resolve({ data: [], error: null })
     ]);
 
     for (const result of [corrections, remarks, reports, history]) {
@@ -1315,29 +1082,21 @@ async function loadSharedData(options = {}) {
     if (projectAssignments.error) console.warn("Could not load mini_project_assignments table. Run the topic assignment SQL setup when ready.", projectAssignments.error);
     if (miniReviews.error) console.warn("Could not load mini_project_reviews table. Run the mini project SQL setup when ready.", miniReviews.error);
     if (photoRecords.error) console.warn("Could not load newbie_photos table. Run the photo SQL setup when ready.", photoRecords.error);
-    if (madaAssignments.error) console.warn("Could not load spoon_madagascar_assignments table. Run the Spoon Madagascar SQL setup when ready.", madaAssignments.error);
-    if (madaReviews.error) console.warn("Could not load spoon_madagascar_reviews table. Run the Spoon Madagascar SQL setup when ready.", madaReviews.error);
     if (!mentorsResult.error) applyMentorRows(mentorsResult.data);
     else console.warn("Could not load mentors table; using local mentor list.", mentorsResult.error);
     if (!juriesResult.error) applyJuryRows(juriesResult.data);
     else console.warn("Could not load juries table; using local jury list.", juriesResult.error);
-    if (!madaJuriesResult.error) applyMadaJuryRows(madaJuriesResult.data);
-    else console.warn("Could not load spoon_madagascar_juries table; using local jury list.", madaJuriesResult.error);
 
     state.groupCorrections = {};
     state.individualRemarks = {};
     state.miniProjectReviews = {};
     state.miniProjectAssignments = {};
-    state.madaReviews = {};
-    state.madaAssignments = {};
     if (includeAdminData) state.reports = {};
 
     corrections.data.forEach(applyGroupCorrectionRow);
     remarks.data.forEach(applyIndividualRemarkRow);
     if (!projectAssignments.error) projectAssignments.data.forEach(applyMiniProjectAssignmentRow);
     if (!miniReviews.error) miniReviews.data.forEach(applyMiniProjectReviewRow);
-    if (!madaAssignments.error) madaAssignments.data.forEach(applyMadaAssignmentRow);
-    if (!madaReviews.error) madaReviews.data.forEach(applyMadaReviewRow);
     applyPhotoRows(photoRecords.error ? [] : photoRecords.data);
     await hydratePhotoUrls();
     if (includeAdminData) {
@@ -1372,23 +1131,6 @@ function scheduleRefresh() {
       return;
     }
     if (!formOpen) mentorDashboard();
-  }, 350);
-}
-
-function scheduleMadaRefresh() {
-  clearTimeout(madaRefreshTimer);
-  madaRefreshTimer = setTimeout(() => {
-    saveLocal();
-    const formOpen = Boolean(document.querySelector("#mada-review-form, #mada-topic-form, .admin-mada-review-form"));
-    if (formOpen) return;
-    if (location.hash === "#admin/spoon-madagascar" && state.session?.role === "admin") {
-      madaAdminPage();
-      return;
-    }
-    if (location.hash === "#mini-project-mada" && state.session?.role === "jury-mada") {
-      if (state.madaJuryView === "review" && state.activeMadaGroup) return madaJuryReviewView(state.activeMadaGroup);
-      if (state.madaJuryView === "groups") return madaJuryDashboard();
-    }
   }, 350);
 }
 
@@ -1441,23 +1183,6 @@ function subscribeSharedData() {
         applyJuryRows(data);
         scheduleRefresh();
       }
-    })
-    .on("postgres_changes", { event: "*", schema: "public", table: "spoon_madagascar_juries" }, async () => {
-      const { data, error } = await supabaseClient.from("spoon_madagascar_juries").select("*").order("name", { ascending: true });
-      if (!error) {
-        applyMadaJuryRows(data);
-        scheduleMadaRefresh();
-      }
-    })
-    .on("postgres_changes", { event: "*", schema: "public", table: "spoon_madagascar_assignments" }, payload => {
-      if (payload.eventType === "DELETE") removeMadaAssignmentRow(payload.old);
-      else applyMadaAssignmentRow(payload.new);
-      scheduleMadaRefresh();
-    })
-    .on("postgres_changes", { event: "*", schema: "public", table: "spoon_madagascar_reviews" }, payload => {
-      if (payload.eventType === "DELETE") removeMadaReviewRow(payload.old);
-      else applyMadaReviewRow(payload.new);
-      scheduleMadaRefresh();
     })
     .subscribe(status => {
       if (status === "SUBSCRIBED") {
@@ -1594,43 +1319,6 @@ function miniProjectPayloadFromForm(form) {
   const data = Object.fromEntries(new FormData(form));
   const scores = Object.fromEntries(miniProjectCriteria.map(criterion => [criterion.key, normalizeMark(data[criterion.key], criterion.max) || 0]));
   const individualNotes = Object.fromEntries(group.participants.map(person => [person, data[`miniNote::${person}`]?.trim() || ""]).filter(([, value]) => value));
-  return { group, data, scores, individualNotes };
-}
-
-async function persistMadaReview(group, formData) {
-  if (!remoteEnabled()) return;
-
-  state.syncStatus = "saving";
-  scheduleMadaRefresh();
-
-  const scores = Object.fromEntries(madaCriteria.map(criterion => [criterion.key, normalizeMark(formData[criterion.key], criterion.max) || 0]));
-  const individualNotes = madaIndividualNotesFromForm(group, formData);
-
-  const { error } = await supabaseClient
-    .from("spoon_madagascar_reviews")
-    .upsert({
-      group_id: group.id,
-      group_name: group.name,
-      jury_name: state.activeMadaJury,
-      scores,
-      total_score: madaBaseCriteria.reduce((sum, criterion) => sum + (scores[criterion.key] || 0), 0),
-      group_note: formData.groupNote || "",
-      individual_notes: individualNotes
-    }, { onConflict: "group_id,jury_name" });
-
-  if (error) throw error;
-
-  state.syncStatus = "online";
-  saveLocal();
-}
-
-function madaReviewPayloadFromForm(form) {
-  if (!form) return null;
-  const group = madaGroupById(form.dataset.madaGroup);
-  if (!group) return null;
-  const data = Object.fromEntries(new FormData(form));
-  const scores = Object.fromEntries(madaCriteria.map(criterion => [criterion.key, normalizeMark(data[criterion.key], criterion.max) || 0]));
-  const individualNotes = madaIndividualNotesFromForm(group, data);
   return { group, data, scores, individualNotes };
 }
 
@@ -1874,62 +1562,6 @@ async function saveMiniProjectAssignmentsAsAdmin(formData) {
   if (error) throw error;
 }
 
-async function saveMadaAssignmentsAsAdmin(formData) {
-  if (state.session?.role !== "admin") throw new Error("Only admin can assign Spoon Madagascar topics.");
-
-  const rows = [];
-  const deleteGroupIds = [];
-  const nextAssignments = {};
-
-  madaGroupsSeed.forEach(group => {
-    const topicKey = formData[`madaTopic::${group.id}`] || "";
-    const topic = madaTopicByKey(topicKey);
-
-    if (!topic) {
-      deleteGroupIds.push(group.id);
-      return;
-    }
-
-    const assignment = {
-      groupId: group.id,
-      groupName: group.name,
-      topicKey,
-      updatedAt: new Date().toISOString()
-    };
-    nextAssignments[String(group.id)] = assignment;
-    rows.push({
-      group_id: group.id,
-      group_name: group.name,
-      topic_key: topic.key,
-      topic_title: topic.title,
-      topic_subtitle: topic.subtitle,
-      topic_brief: topic.brief
-    });
-  });
-
-  state.madaAssignments = nextAssignments;
-  saveLocal();
-
-  if (!remoteEnabled()) return;
-
-  const actions = [];
-  if (rows.length) {
-    actions.push(supabaseClient
-      .from("spoon_madagascar_assignments")
-      .upsert(rows, { onConflict: "group_id" }));
-  }
-  if (deleteGroupIds.length) {
-    actions.push(supabaseClient
-      .from("spoon_madagascar_assignments")
-      .delete()
-      .in("group_id", deleteGroupIds));
-  }
-
-  const madaResults = await Promise.all(actions);
-  const madaError = madaResults.find(result => result.error)?.error;
-  if (madaError) throw madaError;
-}
-
 async function persistMiniReviewAsAdmin(review) {
   if (state.session?.role !== "admin") throw new Error("Only admin can edit jury feedback.");
 
@@ -1983,57 +1615,6 @@ async function deleteMiniReviewAsAdmin(groupId, juryName) {
   if (error) throw error;
 }
 
-async function persistMadaReviewAsAdmin(review) {
-  if (state.session?.role !== "admin") throw new Error("Only admin can edit Spoon Madagascar jury feedback.");
-
-  const group = madaGroupById(review.groupId);
-  const cleanReview = {
-    groupId: Number(review.groupId),
-    groupName: review.groupName || group?.name || `Group ${review.groupId}`,
-    juryName: review.juryName,
-    scores: Object.fromEntries(madaCriteria.map(criterion => [criterion.key, normalizeMark(review.scores?.[criterion.key], criterion.max) || 0])),
-    groupNote: review.groupNote || "",
-    individualNotes: Object.fromEntries((group?.participants || []).map(person => [person, review.individualNotes?.[person]?.trim() || ""]).filter(([, value]) => value)),
-    updatedAt: new Date().toISOString()
-  };
-
-  state.madaReviews[madaReviewKey(cleanReview.groupId, cleanReview.juryName)] = cleanReview;
-  saveLocal();
-
-  if (!remoteEnabled()) return;
-
-  const { error } = await supabaseClient
-    .from("spoon_madagascar_reviews")
-    .upsert({
-      group_id: cleanReview.groupId,
-      group_name: cleanReview.groupName,
-      jury_name: cleanReview.juryName,
-      scores: cleanReview.scores,
-      total_score: madaBaseScore(cleanReview),
-      group_note: cleanReview.groupNote,
-      individual_notes: cleanReview.individualNotes
-    }, { onConflict: "group_id,jury_name" });
-
-  if (error) throw error;
-}
-
-async function deleteMadaReviewAsAdmin(groupId, juryName) {
-  if (state.session?.role !== "admin") throw new Error("Only admin can delete Spoon Madagascar jury feedback.");
-
-  delete state.madaReviews[madaReviewKey(groupId, juryName)];
-  saveLocal();
-
-  if (!remoteEnabled()) return;
-
-  const { error } = await supabaseClient
-    .from("spoon_madagascar_reviews")
-    .delete()
-    .eq("group_id", groupId)
-    .eq("jury_name", juryName);
-
-  if (error) throw error;
-}
-
 function refreshAdminMiniProjectView() {
   if (location.hash === "#admin-table") adminTablePage();
   else adminDashboard(lastAdminMentor);
@@ -2041,13 +1622,9 @@ function refreshAdminMiniProjectView() {
 
 function shell(content) {
   const { name, role } = state.session;
-  const roleLabel = role === "jury" ? "Mini-project jury" : role === "jury-mada" ? "Spoon Madagascar Jury" : "Spoon mentor form";
   const accountControls = role === "admin"
     ? `<span>${esc(name)}</span><span class="role">Admin</span><span class="role sync-pill">${esc(syncLabel())}</span><button class="ghost" data-action="logout">Log out</button>`
-    : role === "jury-mada"
-      // Spoon Madagascar jury never needs (or should be tempted to click into) the admin sign-in flow.
-      ? `<span class="role">${roleLabel}</span><span class="role sync-pill">${esc(syncLabel())}</span>`
-      : `<span class="role">${roleLabel}</span><span class="role sync-pill">${esc(syncLabel())}</span><button class="ghost" data-action="admin-login">Admin</button>`;
+    : `<span class="role">${role === "jury" ? "Mini-project jury" : "Spoon mentor form"}</span><span class="role sync-pill">${esc(syncLabel())}</span><button class="ghost" data-action="admin-login">Admin</button>`;
   app.innerHTML = `<div class="shell"><header class="topbar"><div class="brand"><img class="spoon-logo" src="https://spoonconsulting.com/wp-content/uploads/elementor/thumbs/Logo-Spoon-Spoon-Consulting-2024-scaled-rah72gsdflipzz9bau5ypzlaz4ldjbb0h0vj24z8x8.webp" alt="Spoon Consulting"><span class="product-name">Hackathon Review Hub</span></div><div class="userbox">${accountControls}</div></header>${content}</div>`;
 }
 
@@ -2064,10 +1641,6 @@ function juryTabs() {
   return `<div class="mentor-tabs" aria-label="Jury workspaces">${state.juries.map(name => `<button type="button" class="mentor-tab ${state.activeJury === name ? "active" : ""}" data-jury="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
 }
 
-function madaJuryTabs() {
-  return `<div class="mentor-tabs" aria-label="Spoon Madagascar jury workspaces">${state.madaJuries.map(name => `<button type="button" class="mentor-tab ${state.activeMadaJury === name ? "active" : ""}" data-mada-jury="${esc(name)}"><span>${esc(madaFirstName(name).slice(0, 1))}</span>${esc(madaFirstName(name))}</button>`).join("")}</div>`;
-}
-
 function criteriaSelectView(criterion, value = "") {
   const normalized = normalizeMark(value, criterion.max);
   const selected = normalized === null ? "" : Math.round(normalized * 2) / 2;
@@ -2078,18 +1651,6 @@ function criteriaSelectView(criterion, value = "") {
 function miniTopicBriefView(topic) {
   if (!topic) return `<div class="mini-topic-brief empty">No project title assigned yet. Ask an admin to choose Smart Budget, Health Alert, or Water Wise for this group.</div>`;
   return `<details class="mini-topic-brief"><summary><span>Project brief</span><b>${esc(topicFullTitle(topic))}</b></summary><p>${esc(topic.brief)}</p><p><strong>Bonus AI:</strong> ${esc(topic.bonus)}</p></details>`;
-}
-
-function madaCriterionView(criterion, value) {
-  const normalized = normalizeMark(value, criterion.max);
-  const selected = normalized === null ? "" : Math.round(normalized);
-  const options = Array.from({ length: criterion.max + 1 }, (_, index) => index);
-  return `<div class="criterion-card ${selected !== "" ? "scored" : ""}" data-criteria-max="${criterion.max}"><div class="criterion-copy"><div class="criterion-title-row"><strong>${esc(criterion.label)}</strong><span>${selected !== "" ? `${selected}/${criterion.max}` : `Not scored /${criterion.max}`}</span></div><p>${esc(criterion.prompt)}</p></div><label class="criteria-select-panel"><small>Score / ${criterion.max}</small><select name="${esc(criterion.key)}"><option value="">—</option>${options.map(item => `<option value="${item}" ${selected === item ? "selected" : ""}>${item}</option>`).join("")}</select></label></div>`;
-}
-
-function madaTopicBriefView(topic) {
-  if (!topic) return `<div class="mini-topic-brief empty">No project title assigned yet. Ask an admin to choose Cyclone Ready Mada, Food Wise Madagascar, or Water &amp; Power Watch Mada for this group.</div>`;
-  return `<details class="mini-topic-brief"><summary><span>Project brief</span><b>${esc(madaTopicFullTitle(topic))}</b></summary><p>${esc(topic.brief)}</p><p><strong>Bonus AI:</strong> ${esc(topic.bonus)}</p></details>`;
 }
 
 function answerGuideView(question) {
@@ -2159,7 +1720,7 @@ function groupState(group) {
 }
 
 function mentorDashboard() {
-  shell(`<main class="page simple-page"><nav class="journey" aria-label="Review steps"><span class="active">1 <b>Mentor</b></span><i></i><span>2 <b>Choose group</b></span><i></i><span>3 <b>Submit review</b></span></nav><section class="mentor-choice"><p class="eyebrow orange-eyebrow">Start here</p><h1>Choose your mentor name</h1><p>Tap your name below. We’ll remember it on this device.</p>${mentorTabs()}</section><section class="group-heading"><div><span class="selected-mentor"><i>${state.activeMentor[0]}</i> Reviewing as <strong>${esc(state.activeMentor)}</strong></span><h2>Choose a group</h2></div><div class="status-key"><span><i class="new"></i>Not started</span><span><i class="started"></i>In progress</span><span><i class="complete"></i>Completed</span></div></section><section class="group-list">${state.data.groups.map(group => { const gs = groupState(group); return `<button class="group-row" data-group-review="${group.id}" data-resume-q="${gs.resume}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small>${group.participants.length} participants · ${gs.completed}/${state.data.questions.length} questions</small></span><span class="group-status ${gs.tone}"><i></i>${gs.label}<small>${gs.detail}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">In-progress groups automatically resume at the first unanswered question. Your review saves to the shared dashboard when connected. <button class="subtle-link" type="button" data-action="mada-jury">Spoon Madagascar jury →</button></p></main>`);
+  shell(`<main class="page simple-page"><nav class="journey" aria-label="Review steps"><span class="active">1 <b>Mentor</b></span><i></i><span>2 <b>Choose group</b></span><i></i><span>3 <b>Submit review</b></span></nav><section class="mentor-choice"><p class="eyebrow orange-eyebrow">Start here</p><h1>Choose your mentor name</h1><p>Tap your name below. We’ll remember it on this device.</p>${mentorTabs()}</section><section class="group-heading"><div><span class="selected-mentor"><i>${state.activeMentor[0]}</i> Reviewing as <strong>${esc(state.activeMentor)}</strong></span><h2>Choose a group</h2></div><div class="status-key"><span><i class="new"></i>Not started</span><span><i class="started"></i>In progress</span><span><i class="complete"></i>Completed</span></div></section><section class="group-list">${state.data.groups.map(group => { const gs = groupState(group); return `<button class="group-row" data-group-review="${group.id}" data-resume-q="${gs.resume}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small>${group.participants.length} participants · ${gs.completed}/${state.data.questions.length} questions</small></span><span class="group-status ${gs.tone}"><i></i>${gs.label}<small>${gs.detail}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">In-progress groups automatically resume at the first unanswered question. Your review saves to the shared dashboard when connected.</p></main>`);
 }
 
 function openMiniProject() {
@@ -2171,27 +1732,11 @@ function openMiniProject() {
   miniProjectLanding();
 }
 
-function openMadaJury() {
-  location.hash = "mini-project-mada";
-  state.session = { name: state.activeMadaJury, role: "jury-mada" };
-  state.madaJuryView = "landing";
-  state.activeMadaGroup = null;
-  save();
-  madaJuryLanding();
-}
-
 function miniProjectLanding() {
   state.miniProjectView = "landing";
   state.activeMiniGroup = null;
   saveLocal();
   shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero centered"><p class="eyebrow orange-eyebrow">Mini-project jury</p><h1>Choose your jury name</h1><p>Score each group out of ${miniProjectTotal} marks. Pick your name, then choose the group you want to review.</p><span class="mini-jury-score-chip">${miniProjectTotal} marks total</span></section><section class="mentor-choice mini-jury-choice">${juryTabs()}</section></main>`);
-}
-
-function madaJuryLanding() {
-  state.madaJuryView = "landing";
-  state.activeMadaGroup = null;
-  saveLocal();
-  shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero centered"><p class="eyebrow orange-eyebrow">Spoon Madagascar jury</p><h1>Choose your jury name</h1><p>Score each group out of ${madaBaseTotal} base marks, plus a separate AI bonus out of ${madaBonusCriterion.max}. Pick your name — we'll show only the groups from your home office.</p><span class="mini-jury-score-chip">${madaBaseTotal} + ${madaBonusCriterion.max} bonus marks</span></section><section class="mentor-choice mini-jury-choice">${madaJuryTabs()}</section></main>`);
 }
 
 function miniProjectDashboard() {
@@ -2200,16 +1745,6 @@ function miniProjectDashboard() {
   saveLocal();
   const reviewedCount = state.data.groups.filter(group => state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)]).length;
   shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero split"><div><p class="eyebrow orange-eyebrow">Mini-project jury</p><h1>Choose a group</h1><p>Open a group, enter the criteria scores, and add notes if needed. Your work autosaves while you review.</p></div><aside class="mini-jury-profile"><span>${esc(state.activeJury[0] || "J")}</span><strong>${esc(state.activeJury)}</strong><small>${reviewedCount}/${state.data.groups.length} groups scored</small><button class="secondary" data-action="mini-project">Change jury</button></aside></section><section class="group-list mini-group-list">${state.data.groups.map(group => { const review = state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)]; const score = miniProjectScore(review); const topic = topicForGroup(group); return `<button class="group-row mini-group-row" data-mini-group="${group.id}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small class="mini-topic-line">${topic ? `<b>${esc(topic.title)}</b> — ${esc(topic.subtitle)}` : "No title assigned yet"}</small><small>${group.participants.length} participants</small></span><span class="group-status ${review ? "complete" : "new"}"><i></i>${review ? `${score}/${miniProjectTotal}` : "Start"}<small>${review ? "Edit review" : "Not scored yet"}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">Admin combines the average mini-project score with the hackathon question marks.</p></main>`);
-}
-
-function madaJuryDashboard() {
-  state.madaJuryView = "groups";
-  state.activeMadaGroup = null;
-  saveLocal();
-  const office = madaJuryOffice(state.activeMadaJury);
-  const groups = office ? madaGroupsForOffice(office) : [];
-  const reviewedCount = groups.filter(group => state.madaReviews[madaReviewKey(group.id, state.activeMadaJury)]).length;
-  shell(`<main class="page simple-page mini-jury-page"><section class="mini-jury-hero split"><div><p class="eyebrow orange-eyebrow">Spoon Madagascar jury</p><h1>Choose a group</h1><p>Open a group, enter the criteria scores, and add a group note. Groups are limited to your home office.</p></div><aside class="mini-jury-profile"><span>${esc(madaFirstName(state.activeMadaJury || "J").slice(0, 1))}</span><strong>${esc(madaFirstName(state.activeMadaJury || "Jury"))}</strong><small class="mada-office-badge">${esc(office || "No office set")}</small><small>${reviewedCount}/${groups.length} groups scored</small><button class="secondary" data-action="mada-jury">Change jury</button></aside></section><section class="group-list mini-group-list">${groups.length ? groups.map(group => { const review = state.madaReviews[madaReviewKey(group.id, state.activeMadaJury)]; const score = madaBaseScore(review); const topic = madaTopicForGroup(group); return `<button class="group-row mini-group-row" data-mada-group="${group.id}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small class="mini-topic-line">${topic ? `<b>${esc(topic.title)}</b> — ${esc(topic.subtitle)}` : "No title assigned yet"}</small><small>${group.participants.length} participants</small></span><span class="group-status ${review ? "complete" : "new"}"><i></i>${review ? `${score}/${madaBaseTotal}` : "Start"}<small>${review ? "Edit review" : "Not scored yet"}</small></span><span class="row-arrow">→</span></button>`; }).join("") : `<p class="help-line">No groups found for your office yet. Ask an admin to check your jury record.</p>`}</section><p class="help-line">Admin combines Spoon Madagascar scores separately from the Mauritius scoreboard.</p></main>`);
 }
 
 function miniProjectReviewView(groupId) {
@@ -2221,19 +1756,6 @@ function miniProjectReviewView(groupId) {
   const review = state.miniProjectReviews[miniReviewKey(group.id, state.activeJury)] || { scores: {}, individualNotes: {} };
   const topic = topicForGroup(group);
   shell(`<main class="page guided-review mini-review-page"><div class="mini-review-topbar"><div class="mini-review-left"><button class="back-link" data-action="mini-dashboard">← Groups</button></div><div class="mini-review-title"><span>${esc(group.name)}</span><strong>${esc(topic?.title || "No title assigned")}</strong><small>${esc(state.activeJury)}</small>${topic ? `<em>${esc(topic.subtitle)}</em>` : ""}</div><div class="mini-review-meta"><div class="question-progress"><span>${miniProjectScore(review)}/${miniProjectTotal}</span><div><i style="width:${miniProjectScore(review) / miniProjectTotal * 100}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved" : "Not scored"}</span></div></div><section class="workflow mini-workflow"><form id="mini-project-form" data-group="${group.id}">${miniTopicBriefView(topic)}<div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-card-strip"><strong>Criteria scores</strong><span>Half marks allowed · choose — to clear</span></div><div class="criteria-grid">${miniProjectCriteria.map(criterion => criteriaSelectView(criterion, miniCriterionScore(review.scores, criterion))).join("")}</div></article><aside class="card mini-notes-card"><div class="mini-card-strip note-strip"><strong>Notes</strong><span>${group.participants.length} participants</span></div><div class="jury-note-panel important"><div><strong>Group note</strong><button class="subtle-link note-clear" type="button" data-clear-note="group">Clear</button></div><textarea name="groupNote" placeholder="Group strengths, weaknesses, reason behind score…">${esc(review.groupNote)}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes</strong><button class="subtle-link note-clear" type="button" data-clear-note="individual">Clear</button></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="miniNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
-}
-
-function madaJuryReviewView(groupId) {
-  const group = madaGroupById(groupId);
-  if (!group) return madaJuryDashboard();
-  state.madaJuryView = "review";
-  state.activeMadaGroup = group.id;
-  saveLocal();
-  const review = state.madaReviews[madaReviewKey(group.id, state.activeMadaJury)] || { scores: {} };
-  const topic = madaTopicForGroup(group);
-  const baseScore = madaBaseScore(review);
-  const bonusScore = madaBonusScore(review);
-  shell(`<main class="page guided-review mini-review-page"><div class="mini-review-topbar"><div class="mini-review-left"><button class="back-link" data-action="mada-jury-dashboard">← Groups</button></div><div class="mini-review-title"><span>${esc(group.name)}</span><strong>${esc(topic?.title || "No title assigned")}</strong><small>${esc(madaFirstName(state.activeMadaJury || "Jury"))}</small>${topic ? `<em>${esc(topic.subtitle)}</em>` : ""}</div><div class="mini-review-meta"><div class="question-progress"><span>${baseScore}/${madaBaseTotal} + ${bonusScore} bonus</span><div><i style="width:${baseScore / madaBaseTotal * 100}%"></i></div></div><span class="autosave-note">${review.updatedAt ? "Saved" : "Not scored"}</span></div></div><section class="workflow mini-workflow"><form id="mada-review-form" data-mada-group="${group.id}">${madaTopicBriefView(topic)}<div class="mini-console"><article class="card question-card mini-score-card"><div class="mini-card-strip"><strong>Criteria scores</strong><span>Whole numbers 0–10 · bonus tracked separately</span></div><div class="criteria-grid">${madaBaseCriteria.map(criterion => madaCriterionView(criterion, review.scores?.[criterion.key])).join("")}${madaCriterionView(madaBonusCriterion, review.scores?.[madaBonusCriterion.key])}</div></article><aside class="card mini-notes-card"><div class="mini-card-strip note-strip"><strong>Notes</strong><span>${group.participants.length} participants</span></div><div class="jury-note-panel important"><div><strong>Group note</strong></div><textarea name="groupNote" placeholder="Group strengths, weaknesses, reason behind score…">${esc(review.groupNote || "")}</textarea></div><div class="jury-note-panel"><div><strong>Individual notes</strong></div><div class="mini-individual-notes">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea class="compact" name="madaNote::${esc(person)}" placeholder="Optional note…">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div></div></aside></div><div class="sticky-actions"><button class="secondary" type="submit" name="destination" value="dashboard">Save & choose another group</button><button class="primary" type="submit" name="destination" value="stay">Save review ✓</button></div></form></section></main>`);
 }
 
 function correctionView(groupId, qid = 1) {
@@ -2347,15 +1869,6 @@ function miniProjectTopicAdminView() {
   return `<article class="card report-card mini-topic-admin-card"><div class="report-heading"><div><p class="eyebrow">Mini-project titles</p><h2>Assign, change, or unassign group topics</h2><p class="subtle">Choose a title to assign/change it, or choose “Unassigned / remove title” to remove it from the jury screens.</p></div><span class="ai-badge">${Object.keys(state.miniProjectAssignments).length}/${state.data.groups.length} assigned</span></div><form id="mini-project-topic-form" class="mini-topic-admin-form"><div class="mini-topic-admin-grid">${state.data.groups.map(group => { const assignment = assignmentForGroup(group); const topic = topicByKey(assignment?.topicKey); return `<label><span><strong>${esc(group.name)}</strong><small>${topic ? `Current: ${esc(topic.title)}` : "Currently unassigned"}</small></span><select name="topic::${group.id}">${topicOptions(assignment?.topicKey)}</select></label>`; }).join("")}</div><details class="mini-topic-options"><summary>View the 3 topic briefs</summary>${miniProjectTopics.map(topic => `<section><strong>${esc(topicFullTitle(topic))}</strong><p>${esc(topic.brief)}</p><small><b>Bonus AI:</b> ${esc(topic.bonus)}</small></section>`).join("")}</details><button class="primary" type="submit">Save title changes</button></form></article>`;
 }
 
-function madaTopicAdminView() {
-  const topicOptions = topicKey => [
-    `<option value="">— Unassigned / remove title —</option>`,
-    ...madaTopics.map(topic => `<option value="${esc(topic.key)}" ${topicKey === topic.key ? "selected" : ""}>${esc(madaTopicFullTitle(topic))}</option>`)
-  ].join("");
-
-  return `<article class="card report-card mini-topic-admin-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar titles</p><h2>Assign, change, or unassign group topics</h2><p class="subtle">Choose a title to assign/change it, or choose “Unassigned / remove title” to remove it from the jury screens.</p></div><span class="ai-badge">${Object.keys(state.madaAssignments).length}/${madaGroupsSeed.length} assigned</span></div><form id="mada-topic-form" class="mini-topic-admin-form"><div class="mini-topic-admin-grid">${madaGroupsSeed.map(group => { const assignment = madaAssignmentForGroup(group); const topic = madaTopicByKey(assignment?.topicKey); return `<label><span><strong>${esc(group.name)}</strong><small class="mada-office-badge">${esc(group.office)}</small><small>${topic ? `Current: ${esc(topic.title)}` : "Currently unassigned"}</small></span><select name="madaTopic::${group.id}">${topicOptions(assignment?.topicKey)}</select></label>`; }).join("")}</div><details class="mini-topic-options"><summary>View the 3 topic briefs</summary>${madaTopics.map(topic => `<section><strong>${esc(madaTopicFullTitle(topic))}</strong><p>${esc(topic.brief)}</p><small><b>Bonus AI:</b> ${esc(topic.bonus)}</small></section>`).join("")}</details><button class="primary" type="submit">Save title changes</button></form></article>`;
-}
-
 function adminMiniReviewEditorView() {
   const reviews = Object.values(state.miniProjectReviews)
     .sort((a, b) => Number(a.groupId) - Number(b.groupId) || String(a.juryName).localeCompare(String(b.juryName)));
@@ -2371,26 +1884,8 @@ function adminMiniReviewEditorView() {
   }).join("")}</div></article>`;
 }
 
-function madaReviewEditorView() {
-  const reviews = Object.values(state.madaReviews)
-    .sort((a, b) => Number(a.groupId) - Number(b.groupId) || String(a.juryName).localeCompare(String(b.juryName)));
-
-  if (!reviews.length) {
-    return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar admin editor</p><h2>Jury feedback controls</h2></div><span class="ai-badge">0 reviews</span></div><p class="subtle">No jury feedback has been submitted yet.</p></article>`;
-  }
-
-  return `<article class="card report-card admin-mini-editor-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar admin editor</p><h2>Edit or remove jury feedback</h2><p class="subtle">Change criteria points or delete a full jury feedback entry.</p></div><span class="ai-badge">${reviews.length} review${reviews.length === 1 ? "" : "s"}</span></div><div class="admin-mini-editor-list">${reviews.map(review => {
-    const group = madaGroupById(review.groupId);
-    return `<form class="admin-mada-review-form" data-mada-group="${esc(review.groupId)}" data-mada-jury="${esc(review.juryName)}"><div class="admin-mini-editor-head"><div><p class="eyebrow">${esc(group?.name || review.groupName || `Group ${review.groupId}`)}</p><h3>${esc(madaFirstName(review.juryName))} feedback</h3><small>${madaBaseScore(review)}/${madaBaseTotal} base · ${madaBonusScore(review)}/${madaBonusCriterion.max} bonus</small></div><div class="admin-mini-actions"><button class="danger-mini" type="button" data-delete-mada-review="${esc(review.groupId)}|${esc(review.juryName)}">Delete feedback</button><button class="primary" type="submit">Save changes</button></div></div><div class="admin-mini-score-grid">${madaCriteria.map(criterion => `<label><span>${esc(criterion.label)} <b>/${criterion.max}</b></span><input type="number" min="0" max="${criterion.max}" step="1" name="${esc(criterion.key)}" value="${esc(madaCriterionScore(review.scores, criterion) || 0)}"></label>`).join("")}</div><label class="admin-mini-note-wide"><span>Group note</span><textarea name="groupNote" placeholder="Group-level feedback...">${esc(review.groupNote || "")}</textarea></label>${(group?.participants || []).length ? `<div class="admin-mini-notes-grid">${group.participants.map(person => `<label>${participantNameBlock(person)}<textarea name="madaNote::${esc(person)}" placeholder="Individual note...">${esc(review.individualNotes?.[person] || "")}</textarea></label>`).join("")}</div>` : ""}</form>`;
-  }).join("")}</div></article>`;
-}
-
 function juryAdminView() {
   return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Jury management</p><h2>Mini-project jury</h2></div><span class="ai-badge">${state.juries.length} active</span></div><form id="jury-form" class="inline-admin-form"><label>Add jury<input name="juryName" type="text" placeholder="Jury name" required></label><button class="primary" type="submit">Add jury</button></form><form id="jury-rename-form" class="inline-admin-form rename-admin-form"><label>Current jury<select name="oldJuryName" required>${state.juries.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select></label><label>New name<input name="newJuryName" type="text" placeholder="Corrected jury name" required></label><button class="secondary" type="submit">Rename jury</button></form><div class="mentor-admin-list">${state.juries.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-jury="${esc(name)}">Delete</button></div>`).join("")}</div></article>`;
-}
-
-function madaJuryAdminView() {
-  return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Jury management</p><h2>Spoon Madagascar jury</h2></div><span class="ai-badge">${state.madaJuries.length} active</span></div><form id="mada-jury-form" class="inline-admin-form"><label>Add jury<input name="madaJuryName" type="text" placeholder="Jury name" required></label><label>Office<select name="madaJuryOffice">${madaOffices.map(office => `<option value="${esc(office)}">${esc(office)}</option>`).join("")}</select></label><button class="primary" type="submit">Add jury</button></form><form id="mada-jury-rename-form" class="inline-admin-form rename-admin-form"><label>Current jury<select name="oldMadaJuryName" required>${state.madaJuries.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select></label><label>New name<input name="newMadaJuryName" type="text" placeholder="Corrected jury name" required></label><label>Office<select name="newMadaJuryOffice">${madaOffices.map(office => `<option value="${esc(office)}">${esc(office)}</option>`).join("")}</select></label><button class="secondary" type="submit">Rename jury</button></form><div class="mentor-admin-list">${state.madaJuries.map(name => `<div class="mada-jury-admin-row"><span class="avatar">${esc(madaFirstName(name)[0] || "?")}</span><strong>${esc(madaFirstName(name))}</strong><small class="mada-office-badge">${esc(madaJuryOffice(name) || "—")}</small><button class="danger-mini" data-delete-mada-jury="${esc(name)}">Delete</button></div>`).join("")}</div></article>`;
 }
 
 function adminDetailedGroupCardsView() {
@@ -2399,73 +1894,6 @@ function adminDetailedGroupCardsView() {
 
 function adminTablePage() {
   shell(`<main class="page admin-page admin-table-page"><section class="hero"><div><p class="eyebrow">Admin table view</p><h1>All group + individual info</h1></div><button class="secondary" data-action="admin-dashboard">← Back to dashboard</button></section><section class="report-stack">${adminFullInfoTableView()}${adminMiniReviewEditorView()}</section></main>`);
-}
-
-function buildMadaGroupSummary(group) {
-  const reviews = madaReviewsForGroup(group);
-  const topic = madaTopicForGroup(group);
-  const topicCopy = topic ? `Project: ${madaTopicFullTitle(topic)}. ` : "";
-  if (!reviews.length) return `${topicCopy}No Spoon Madagascar jury feedback has been submitted yet.`;
-  const base = madaGroupAverage(group);
-  const bonus = madaBonusAverage(group);
-  const juryDetails = reviews
-    .slice()
-    .sort((a, b) => String(a.juryName).localeCompare(String(b.juryName)))
-    .map(review => `${esc(madaFirstName(review.juryName || "Jury"))}: ${madaBaseScore(review)}/${madaBaseTotal} base + ${madaBonusScore(review)}/${madaBonusCriterion.max} bonus${review.groupNote ? ` — ${review.groupNote}` : ""}`);
-  return `${topicCopy}Average score: ${base}/${madaBaseTotal} base, ${bonus}/${madaBonusCriterion.max} bonus, from ${reviews.length} jury member(s). ${juryDetails.join(" · ")}`;
-}
-
-function buildMadaPersonFeedback(person) {
-  const notes = Object.values(state.madaReviews)
-    .filter(review => review.individualNotes?.[person]?.trim())
-    .map(review => ({ jury: review.juryName || "Jury", text: review.individualNotes[person] }));
-  if (!notes.length) return "No individual feedback has been submitted yet.";
-  return `${notes.length} note(s): ${notes.slice(0, 3).map(item => `${madaFirstName(item.jury)}: ${item.text}`).join(" · ")}`;
-}
-
-function madaDetailedGroupCardsView() {
-  return madaGroupsSeed.map(group => {
-    const topic = madaTopicForGroup(group);
-    const base = madaGroupAverage(group);
-    const bonus = madaBonusAverage(group);
-    return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office)}</p><h2>Group summary</h2>${topic ? `<p class="subtle">${esc(madaTopicFullTitle(topic))}</p>` : ""}</div><span class="ai-badge">${base}/${madaBaseTotal} + ${bonus} bonus</span></div><p class="summary-text">${esc(state.reports[`mada-group|${group.id}`] || buildMadaGroupSummary(group))}</p><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`mada-person|${person}`] || buildMadaPersonFeedback(person))}</p></div>`).join("")}</div></article>`;
-  }).join("");
-}
-
-async function persistMadaReports() {
-  if (!remoteEnabled()) return;
-
-  const rows = [];
-  madaGroupsSeed.forEach(group => {
-    rows.push({
-      report_key: `mada-group|${group.id}`,
-      report_type: "group",
-      group_id: group.id,
-      group_name: group.name,
-      participant_name: null,
-      content: state.reports[`mada-group|${group.id}`] || buildMadaGroupSummary(group)
-    });
-    group.participants.forEach(person => {
-      rows.push({
-        report_key: `mada-person|${person}`,
-        report_type: "person",
-        group_id: group.id,
-        group_name: group.name,
-        participant_name: person,
-        content: state.reports[`mada-person|${person}`] || buildMadaPersonFeedback(person)
-      });
-    });
-  });
-
-  const { error } = await supabaseClient.from("ai_reports").upsert(rows, { onConflict: "report_key" });
-  if (error) throw error;
-}
-
-function madaAdminPage() {
-  const scoreRows = madaScoreboard();
-  const leader = scoreRows[0];
-  const generatedCount = Object.keys(state.reports).filter(key => key.startsWith("mada-group|") || key.startsWith("mada-person|")).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroupsSeed.length}</strong><span>Groups</span></div><div class="stat"><strong>${madaBaseTotal + madaBonusCriterion.max}</strong><span>Combined total marks</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaBaseTotal} base + ${madaBonusCriterion.max} bonus marks</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.base > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>Base ${row.base}/${row.baseMax} · Bonus ${row.bonus}/${row.bonusMax}</small><meter min="0" max="${row.baseMax || 1}" value="${row.base}"></meter><b>${row.base}/${row.baseMax}</b></div>`).join("")}</div></article>${madaDetailedGroupCardsView()}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
 }
 
 function buildPersonFeedback(person) {
@@ -2518,7 +1946,7 @@ function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${miniProjectTopicAdminView()}${photoManagerView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Mentor management</p><h2>Spoon mentors</h2></div><span class="ai-badge">${state.mentors.length} active</span></div><form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div></article>${juryAdminView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><div class="subtle-actions"><span class="ai-badge">${esc(syncLabel())}</span>${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div></div>${historyList()}</article></section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${miniProjectTopicAdminView()}${photoManagerView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Mentor management</p><h2>Spoon mentors</h2></div><span class="ai-badge">${state.mentors.length} active</span></div><form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div></article>${juryAdminView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><div class="subtle-actions"><span class="ai-badge">${esc(syncLabel())}</span>${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div></div>${historyList()}</article></section></main>`);
 }
 
 function openPublicForm() {
@@ -2542,20 +1970,12 @@ function openCurrentPublicFlow() {
 function dashboard() {
   if (location.hash === "#admin-table") return state.session?.role === "admin" ? adminTablePage() : loginView();
   if (location.hash === "#admin") return state.session?.role === "admin" ? adminDashboard(lastAdminMentor) : loginView();
-  if (location.hash === "#admin/spoon-madagascar") return state.session?.role === "admin" ? madaAdminPage() : loginView();
   if (location.hash === "#mini-project") {
     state.session = { name: state.activeJury, role: "jury" };
     saveLocal();
     if (state.miniProjectView === "review" && state.activeMiniGroup) return miniProjectReviewView(state.activeMiniGroup);
     if (state.miniProjectView === "groups") return miniProjectDashboard();
     return miniProjectLanding();
-  }
-  if (location.hash === "#mini-project-mada") {
-    state.session = { name: state.activeMadaJury, role: "jury-mada" };
-    saveLocal();
-    if (state.madaJuryView === "review" && state.activeMadaGroup) return madaJuryReviewView(state.activeMadaGroup);
-    if (state.madaJuryView === "groups") return madaJuryDashboard();
-    return madaJuryLanding();
   }
   openPublicForm();
 }
@@ -2716,93 +2136,6 @@ document.addEventListener("submit", async event => {
 
     if (data.destination === "dashboard" || qid === state.data.questions.length) mentorDashboard();
     else correctionView(group.id, qid + 1);
-  }
-
-  if (event.target.id === "mada-jury-form") {
-    const data = Object.fromEntries(new FormData(event.target));
-    try {
-      await addMadaJuryAsAdmin(data.madaJuryName || "", data.madaJuryOffice || "");
-      showToast("✓ Spoon Madagascar jury added");
-      madaAdminPage();
-    } catch (error) {
-      showToast(friendlyError(error, "Could not add jury. Try again."));
-    }
-  }
-
-  if (event.target.id === "mada-jury-rename-form") {
-    const data = Object.fromEntries(new FormData(event.target));
-    try {
-      await renameMadaJuryAsAdmin(data.oldMadaJuryName || "", data.newMadaJuryName || "", data.newMadaJuryOffice || "");
-      showToast("✓ Spoon Madagascar jury renamed");
-      madaAdminPage();
-    } catch (error) {
-      showToast(friendlyError(error, "Could not rename jury. Try again."));
-    }
-  }
-
-  if (event.target.id === "mada-topic-form") {
-    const data = Object.fromEntries(new FormData(event.target));
-    try {
-      await saveMadaAssignmentsAsAdmin(data);
-      showToast(updatedOnlineMessage("Spoon Madagascar group titles"));
-      madaAdminPage();
-    } catch (error) {
-      console.error("Spoon Madagascar title save failed", error);
-      showToast(friendlyError(error, "Could not save group titles. Try again."));
-    }
-  }
-
-  if (event.target.classList.contains("admin-mada-review-form")) {
-    const group = madaGroupById(event.target.dataset.madaGroup);
-    const data = Object.fromEntries(new FormData(event.target));
-    const review = {
-      groupId: Number(event.target.dataset.madaGroup),
-      groupName: group?.name || `Group ${event.target.dataset.madaGroup}`,
-      juryName: event.target.dataset.madaJury,
-      scores: Object.fromEntries(madaCriteria.map(criterion => [criterion.key, normalizeMark(data[criterion.key], criterion.max) || 0])),
-      groupNote: data.groupNote || "",
-      individualNotes: madaIndividualNotesFromForm(group, data)
-    };
-
-    try {
-      await persistMadaReviewAsAdmin(review);
-      showToast("✓ Spoon Madagascar jury feedback updated");
-      madaAdminPage();
-    } catch (error) {
-      console.error("Admin Spoon Madagascar jury feedback update failed", error);
-      showToast(friendlyError(error, "Could not update jury feedback. Try again."));
-    }
-  }
-
-  if (event.target.id === "mada-review-form") {
-    const submitter = event.submitter;
-    const destination = submitter?.value || "stay";
-    const payload = madaReviewPayloadFromForm(event.target);
-    if (!payload) return;
-    const { group, data, scores, individualNotes } = payload;
-    state.madaReviews[madaReviewKey(group.id, state.activeMadaJury)] = {
-      groupId: group.id,
-      groupName: group.name,
-      juryName: state.activeMadaJury,
-      scores,
-      groupNote: data.groupNote || "",
-      individualNotes,
-      updatedAt: new Date().toISOString()
-    };
-    save();
-
-    try {
-      await persistMadaReview(group, data);
-      showToast(savedOnlineMessage("Spoon Madagascar review"));
-    } catch (error) {
-      console.error("Spoon Madagascar review save failed", error);
-      state.syncStatus = "error";
-      save();
-      showToast(friendlyError(error, localSyncIssueMessage("update the shared review")));
-    }
-
-    if (destination === "dashboard") madaJuryDashboard();
-    else madaJuryReviewView(group.id);
   }
 });
 
@@ -3016,80 +2349,6 @@ document.addEventListener("click", async event => {
 
     adminDashboard(lastAdminMentor);
   }
-
-  if (button.dataset.action === "generate-mada-reports") {
-    madaGroupsSeed.forEach(group => {
-      state.reports[`mada-group|${group.id}`] = buildMadaGroupSummary(group);
-      group.participants.forEach(person => state.reports[`mada-person|${person}`] = buildMadaPersonFeedback(person));
-    });
-    save();
-
-    try {
-      await persistMadaReports();
-      showToast(remoteEnabled() ? "✓ Spoon Madagascar reports saved online" : "✓ Spoon Madagascar reports generated on this device");
-    } catch (error) {
-      console.error("Spoon Madagascar report save failed", error);
-      showToast(friendlyError(error, localSyncIssueMessage("save the Spoon Madagascar reports online")));
-    }
-
-    madaAdminPage();
-  }
-
-  if (button.dataset.action === "mada-admin") {
-    location.hash = "admin/spoon-madagascar";
-    if (state.session?.role !== "admin") return loginView();
-    madaAdminPage();
-    return;
-  }
-  if (button.dataset.action === "mada-jury") {
-    openMadaJury();
-    return;
-  }
-  if (button.dataset.action === "mada-jury-dashboard") {
-    madaJuryDashboard();
-    return;
-  }
-  if (button.dataset.madaJury) {
-    if (state.activeMadaJury !== button.dataset.madaJury || state.session?.role !== "jury-mada") {
-      state.activeMadaJury = button.dataset.madaJury;
-      state.session = { name: state.activeMadaJury, role: "jury-mada" };
-      save();
-    }
-    madaJuryDashboard();
-    return;
-  }
-  if (button.dataset.madaGroup) {
-    madaJuryReviewView(button.dataset.madaGroup);
-    return;
-  }
-  if (button.dataset.deleteMadaJury) {
-    const name = button.dataset.deleteMadaJury;
-    const ok = confirm(`Delete ${madaFirstName(name)} from the active Spoon Madagascar jury list? Existing feedback will keep its attribution.`);
-    if (!ok) return;
-
-    try {
-      await deleteMadaJuryAsAdmin(name);
-      showToast("✓ Spoon Madagascar jury deleted");
-      madaAdminPage();
-    } catch (error) {
-      showToast(friendlyError(error, "Could not delete jury. Try again."));
-    }
-  }
-  if (button.dataset.deleteMadaReview) {
-    const [groupId, juryName] = button.dataset.deleteMadaReview.split("|");
-    const group = madaGroupById(groupId);
-    const ok = confirm(`Delete ${madaFirstName(juryName)}'s Spoon Madagascar feedback for ${group?.name || `Group ${groupId}`}?`);
-    if (!ok) return;
-
-    try {
-      await deleteMadaReviewAsAdmin(Number(groupId), juryName);
-      showToast("✓ Spoon Madagascar jury feedback deleted");
-      madaAdminPage();
-    } catch (error) {
-      console.error("Delete Spoon Madagascar jury feedback failed", error);
-      showToast(friendlyError(error, "Could not delete jury feedback. Try again."));
-    }
-  }
 });
 
 document.addEventListener("change", event => {
@@ -3125,7 +2384,7 @@ document.addEventListener("keydown", event => {
 
 window.addEventListener("hashchange", async () => {
   closePhotoViewer();
-  if ((location.hash === "#admin" || location.hash === "#admin-table" || location.hash === "#admin/spoon-madagascar") && state.session?.role !== "admin") {
+  if ((location.hash === "#admin" || location.hash === "#admin-table") && state.session?.role !== "admin") {
     const isAdmin = await verifyAdminSession();
     if (isAdmin) await loadSharedData({ includeAdminData: true });
   }
@@ -3137,9 +2396,7 @@ async function boot() {
   if (!isAdmin && (!state.session || state.session.role === "admin")) {
     state.session = location.hash === "#mini-project"
       ? { name: state.activeJury, role: "jury" }
-      : location.hash === "#mini-project-mada"
-        ? { name: state.activeMadaJury, role: "jury-mada" }
-        : { name: state.activeMentor, role: "mentor" };
+      : { name: state.activeMentor, role: "mentor" };
   }
   dashboard();
   await loadSharedData({ includeAdminData: isAdmin });

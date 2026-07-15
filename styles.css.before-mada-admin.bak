@@ -589,21 +589,6 @@ img.participant-photo { background:#dceaf2; }
   .mini-workflow .sticky-actions .primary { width:100%; }
 }
 
-.mada-office-badge { display:inline-flex; align-items:center; justify-content:center; padding:2px 9px; border-radius:999px; background:#eef6f5; color:#087c79; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
-/* Madagascar jury admin rows have an extra office-badge column (avatar/name/badge/delete)
-   that the shared 3-column .mentor-admin-list > div rule doesn't account for, which was
-   pushing the Delete button onto a squished second row. Give this row its own 4-column
-   layout instead of touching the shared rule (keeps Mauritius mentor/jury rows untouched). */
-.mentor-admin-list .mada-jury-admin-row { grid-template-columns:32px minmax(0,1fr) auto auto; gap:8px; }
-.mentor-admin-list .mada-jury-admin-row .mada-office-badge { justify-self:start; }
-@media (max-width: 480px) {
-  .mentor-admin-list .mada-jury-admin-row { grid-template-columns:32px minmax(0,1fr) auto; grid-template-areas:"avatar name delete" "avatar office delete"; }
-  .mentor-admin-list .mada-jury-admin-row .avatar { grid-area:avatar; }
-  .mentor-admin-list .mada-jury-admin-row strong { grid-area:name; }
-  .mentor-admin-list .mada-jury-admin-row .mada-office-badge { grid-area:office; }
-  .mentor-admin-list .mada-jury-admin-row .danger-mini { grid-area:delete; align-self:center; }
-}
-
 @media (max-width: 380px) {
   .mini-individual-notes .participant-name-block { grid-template-columns:40px minmax(0,1fr); gap:8px; font-size:12px; }
   .mini-individual-notes .participant-photo.small { width:40px; height:40px; }
