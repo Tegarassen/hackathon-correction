@@ -1372,7 +1372,7 @@ function scheduleMadaRefresh() {
       madaAdminPage();
       return;
     }
-    if (location.hash === "#mini-project-mada" && state.session?.role === "jury-mada") {
+    if (location.hash === "#mpm" && state.session?.role === "jury-mada") {
       if (state.madaJuryView === "review" && state.activeMadaGroup) return madaJuryReviewView(state.activeMadaGroup);
       if (state.madaJuryView === "groups") return madaJuryDashboard();
     }
@@ -2152,7 +2152,7 @@ function openMiniProject() {
 }
 
 function openMadaJury() {
-  location.hash = "mini-project-mada";
+  location.hash = "mpm";
   state.session = { name: state.activeMadaJury, role: "jury-mada" };
   state.madaJuryView = "landing";
   state.activeMadaGroup = null;
@@ -2527,7 +2527,7 @@ function dashboard() {
     if (state.miniProjectView === "groups") return miniProjectDashboard();
     return miniProjectLanding();
   }
-  if (location.hash === "#mini-project-mada") {
+  if (location.hash === "#mpm") {
     state.session = { name: state.activeMadaJury, role: "jury-mada" };
     saveLocal();
     if (state.madaJuryView === "review" && state.activeMadaGroup) return madaJuryReviewView(state.activeMadaGroup);
@@ -3120,7 +3120,7 @@ async function boot() {
   if (!isAdmin && (!state.session || state.session.role === "admin")) {
     state.session = location.hash === "#mini-project"
       ? { name: state.activeJury, role: "jury" }
-      : location.hash === "#mini-project-mada"
+      : location.hash === "#mpm"
         ? { name: state.activeMadaJury, role: "jury-mada" }
         : { name: state.activeMentor, role: "mentor" };
   }
