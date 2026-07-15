@@ -2516,6 +2516,13 @@ function openCurrentPublicFlow() {
   openPublicForm();
 }
 
+function notFoundView() {
+  // Deliberately bare: no shell/topbar and no buttons or links out of this page.
+  // A retired link (e.g. the old #mini-project-mada path) may have reached people who
+  // shouldn't be pointed toward the mentor/jury/admin areas, so this is a dead end by design.
+  app.innerHTML = `<main class="page simple-page not-found-page"><section class="mentor-choice"><h1>This link is no longer available</h1></section></main>`;
+}
+
 function dashboard() {
   if (location.hash === "#admin-table") return state.session?.role === "admin" ? adminTablePage() : loginView();
   if (location.hash === "#admin") return state.session?.role === "admin" ? adminDashboard(lastAdminMentor) : loginView();
@@ -2534,6 +2541,9 @@ function dashboard() {
     if (state.madaJuryView === "groups") return madaJuryDashboard();
     return madaJuryLanding();
   }
+  // Any hash that isn't one of the routes above (a typo, an old/removed link, etc.)
+  // gets an explicit "not found" message instead of being silently sent home.
+  if (location.hash && location.hash !== "#") return notFoundView();
   openPublicForm();
 }
 
