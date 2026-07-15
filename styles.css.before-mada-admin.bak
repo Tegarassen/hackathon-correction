@@ -589,8 +589,6 @@ img.participant-photo { background:#dceaf2; }
   .mini-workflow .sticky-actions .primary { width:100%; }
 }
 
-.mada-office-badge { display:inline-flex; align-items:center; justify-content:center; padding:2px 9px; border-radius:999px; background:#eef6f5; color:#087c79; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
-
 @media (max-width: 380px) {
   .mini-individual-notes .participant-name-block { grid-template-columns:40px minmax(0,1fr); gap:8px; font-size:12px; }
   .mini-individual-notes .participant-photo.small { width:40px; height:40px; }
