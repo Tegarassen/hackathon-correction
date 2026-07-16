@@ -3258,17 +3258,30 @@ function stakeholderLevel(value, max) {
 function usefulFeedbackSummary(person, group) {
   const adminNotes = participantAdminNotes("mauritius", person).map(item => item.note);
   const notes = [...adminNotes, ...participantQuestionNotes(person, group).map(item => item.note), ...participantMiniNotes(person, group).map(item => item.note)].filter(Boolean);
-  const evidence = notes.slice(0, 2).join(" ");
+  const evidence = polishFallbackFeedback(notes.slice(0, 2).join(" "));
   if (!notes.length) return `${person} does not yet have individual feedback saved; the available context is group-level only, with ${group.name} having ${completedQuestionFeedback(group).length}/${state.data.questions.length} completed question review(s) and a mini-project average of ${miniProjectAverage(group)}/${miniProjectTotal}.`;
-  return `${person}'s available individual feedback indicates: ${evidence}`;
+  return `${person}: ${evidence}`;
 }
 
 function usefulMadaFeedbackSummary(person, group) {
   const adminNotes = participantAdminNotes("madagascar", person).map(item => item.note);
   const notes = [...adminNotes, ...participantMadaNotes(person).map(item => item.note)].filter(Boolean);
-  const evidence = notes.slice(0, 2).join(" ");
+  const evidence = polishFallbackFeedback(notes.slice(0, 2).join(" "));
   if (!notes.length) return `${person} does not yet have individual feedback saved; the available context is group-level only, with ${group.name} having a mini-project average of ${madaGroupAverage(group)}/${madaProjectTotal}.`;
-  return `${person}'s available individual feedback indicates: ${evidence}`;
+  return `${person}: ${evidence}`;
+}
+
+function polishFallbackFeedback(text) {
+  const value = String(text || "")
+    .replace(/\bunderstading\b/gi, "understanding")
+    .replace(/\bteam player\b/gi, "and was a team player")
+    .replace(/\bshowed some understanding and was a team player\b/gi, "showed some understanding and was a team player")
+    .replace(/\s+But\s+/g, ". But ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!value) return "";
+  const polished = value.charAt(0).toUpperCase() + value.slice(1);
+  return /[.!?]$/.test(polished) ? polished : `${polished}.`;
 }
 
 function fallbackStakeholderPersonSummary(person, group, isMada) {
@@ -3276,8 +3289,12 @@ function fallbackStakeholderPersonSummary(person, group, isMada) {
 }
 
 function stakeholderPersonSummary(eventKey, person, group, isMada) {
-  return state.stakeholderPersonSummaries?.[stakeholderPersonSummaryKey(eventKey, person)]
-    || fallbackStakeholderPersonSummary(person, group, isMada);
+  const aiSummary = state.stakeholderPersonSummaries?.[stakeholderPersonSummaryKey(eventKey, person)];
+  if (aiSummary) return aiSummary;
+
+  const status = state.stakeholderSummaryStatus?.[eventKey] || "local";
+  if (status === "loading") return "AI summary is being generated.";
+  return fallbackStakeholderPersonSummary(person, group, isMada);
 }
 
 function stakeholderWinnerView(eventKey, rows) {
