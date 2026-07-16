@@ -117,7 +117,18 @@ let state = JSON.parse(localStorage.getItem("spoon-state-v2") || "null") || {};
 state = {
   session: state.session || null,
   activeMentor: state.activeMentor || "Chevish",
+  mentorAccessUnlocked: state.mentorAccessUnlocked === true,
+  mentorAccessCode: state.mentorAccessCode || "",
+  mentorAccessMentor: state.mentorAccessMentor || "",
+  mentorAccessCodes: state.mentorAccessCodes || {},
+  mentorCodeSetupMissing: false,
   activeJury: state.activeJury || "Varun",
+  juryAccessUnlocked: state.juryAccessUnlocked === true,
+  juryAccessCode: state.juryAccessCode || "",
+  juryAccessJury: state.juryAccessJury || "",
+  juryAccessCodes: state.juryAccessCodes || {},
+  juryAccessPublic: state.juryAccessPublic === true,
+  juryCodeSetupMissing: false,
   mentors: state.mentors || defaultMentors,
   juries: state.juries || defaultJuries,
   groupCorrections: state.groupCorrections || {},
@@ -158,6 +169,35 @@ let miniAutosaveSignature = "";
 const saveLocal = () => localStorage.setItem("spoon-state-v2", JSON.stringify(state));
 const save = saveLocal;
 const esc = (value = "") => String(value).replace(/[&<>'"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
+const randomCodeChunk = () => Math.random().toString(36).slice(2, 6).toUpperCase().replace(/[^A-Z0-9]/g, "X");
+const generateMentorCode = () => `SP-MENTOR-${randomCodeChunk()}-${randomCodeChunk()}`;
+const normalizeAccessCode = value => String(value || "").trim().toUpperCase().replace(/\s+/g, "-");
+const siteUrl = () => `${location.origin}${location.pathname}`;
+const mentorSlug = name => String(name || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "mentor";
+const mentorAccessUrl = (name, code) => `${siteUrl()}?mentor=${encodeURIComponent(mentorSlug(name))}&access=${encodeURIComponent(normalizeAccessCode(code))}`;
+const mentorNameFromSlug = slug => state.mentors.find(name => mentorSlug(name) === String(slug || "").toLowerCase()) || "";
+const generateJuryCode = () => `SP-JURY-${randomCodeChunk()}-${randomCodeChunk()}`;
+const jurySlug = name => mentorSlug(name);
+const juryAccessUrl = (name, code) => `${siteUrl()}?jury=${encodeURIComponent(jurySlug(name))}&juryAccess=${encodeURIComponent(normalizeAccessCode(code))}#mini-project`;
+const juryNameFromSlug = slug => state.juries.find(name => jurySlug(name) === String(slug || "").toLowerCase()) || "";
+const mentorAccessDetails = name => {
+  const code = state.mentorAccessCodes?.[name]?.code || "";
+  const privateUrl = mentorAccessUrl(name, code);
+  return {
+    code,
+    privateUrl,
+    shareText: `Spoon Hackathon mentor page for ${name}: ${privateUrl}\nBackup code: ${code}`
+  };
+};
+const juryAccessDetails = name => {
+  const code = state.juryAccessCodes?.[name]?.code || "";
+  const privateUrl = juryAccessUrl(name, code);
+  return {
+    code,
+    privateUrl,
+    shareText: `Spoon Hackathon jury page for ${name}: ${privateUrl}\nBackup code: ${code}`
+  };
+};
 const groupById = id => state.data.groups.find(group => group.id === Number(id));
 const topicByKey = key => miniProjectTopics.find(topic => topic.key === key);
 const topicFullTitle = topic => topic ? `${topic.title}: ${topic.subtitle}` : "";
@@ -230,6 +270,55 @@ const miniProjectAverage = group => {
 const combinedScoreboard = () => state.data.groups
   .map(group => ({ group, hackathon: groupScore(group), hackathonMax: knownTotalMarks(), mini: miniProjectAverage(group), miniMax: miniProjectTotal, total: groupScore(group) + miniProjectAverage(group), max: knownTotalMarks() + miniProjectTotal, juryCount: miniReviewsForGroup(group).length }))
   .sort((a, b) => b.total - a.total);
+function ensureMentorAccessCodes() {
+  state.mentorAccessCodes = state.mentorAccessCodes || {};
+  state.mentors.forEach(name => {
+    const existing = state.mentorAccessCodes[name];
+    if (!existing?.code) {
+      state.mentorAccessCodes[name] = {
+        code: generateMentorCode(),
+        active: true,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  });
+  Object.keys(state.mentorAccessCodes).forEach(name => {
+    if (!state.mentors.includes(name)) delete state.mentorAccessCodes[name];
+  });
+}
+function mentorAccessIsCurrent() {
+  const record = state.mentorAccessCodes?.[state.activeMentor];
+  if (remoteEnabled() && state.session?.role !== "admin") {
+    return state.mentorAccessUnlocked && Boolean(state.mentorAccessCode) && state.mentorAccessMentor === state.activeMentor;
+  }
+  return state.mentorAccessUnlocked && record?.active !== false && normalizeAccessCode(record?.code) === normalizeAccessCode(state.mentorAccessCode);
+}
+ensureMentorAccessCodes();
+function ensureJuryAccessCodes() {
+  state.juryAccessCodes = state.juryAccessCodes || {};
+  state.juries.forEach(name => {
+    const existing = state.juryAccessCodes[name];
+    if (!existing?.code) {
+      state.juryAccessCodes[name] = {
+        code: generateJuryCode(),
+        active: true,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  });
+  Object.keys(state.juryAccessCodes).forEach(name => {
+    if (!state.juries.includes(name)) delete state.juryAccessCodes[name];
+  });
+}
+function juryAccessIsCurrent() {
+  if (state.juryAccessPublic) return true;
+  const record = state.juryAccessCodes?.[state.activeJury];
+  if (remoteEnabled() && state.session?.role !== "admin") {
+    return state.juryAccessUnlocked && Boolean(state.juryAccessCode) && state.juryAccessJury === state.activeJury;
+  }
+  return state.juryAccessUnlocked && record?.active !== false && normalizeAccessCode(record?.code) === normalizeAccessCode(state.juryAccessCode);
+}
+ensureJuryAccessCodes();
 const madaCriterionScore = miniCriterionScore;
 const madaReviewsForGroup = group => Object.values(state.madaReviews).filter(review => Number(review.groupId) === Number(group.id));
 const madaProjectScore = review => miniProjectScore(review);
@@ -1004,9 +1093,36 @@ function applyMentorRows(rows = []) {
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
 
+  const currentMentorWasRemoved = state.session?.role === "mentor" && activeMentors.length && !activeMentors.includes(state.activeMentor);
   if (activeMentors.length) state.mentors = activeMentors;
+  if (currentMentorWasRemoved) {
+    state.mentorAccessUnlocked = false;
+    state.mentorAccessCode = "";
+    state.mentorAccessMentor = "";
+    state.session = null;
+  }
   if (!state.mentors.includes(state.activeMentor)) state.activeMentor = state.mentors[0] || "Mentor";
+  ensureMentorAccessCodes();
   if (state.session?.role === "mentor") state.session.name = state.activeMentor;
+}
+
+function applyMentorAccessCodeRows(rows = []) {
+  rows
+    .filter(row => row.mentor_name && row.access_code)
+    .forEach(row => {
+      state.mentorAccessCodes[row.mentor_name] = {
+        code: normalizeAccessCode(row.access_code),
+        active: row.active !== false,
+        updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+      };
+    });
+  ensureMentorAccessCodes();
+  if (state.session?.role === "mentor" && !mentorAccessIsCurrent()) {
+    state.mentorAccessUnlocked = false;
+    state.mentorAccessCode = "";
+    state.mentorAccessMentor = "";
+    state.session = null;
+  }
 }
 
 function applyJuryRows(rows = []) {
@@ -1016,9 +1132,41 @@ function applyJuryRows(rows = []) {
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
 
+  const currentJuryWasRemoved = state.session?.role === "jury" && activeJuries.length && !activeJuries.includes(state.activeJury);
   if (activeJuries.length) state.juries = activeJuries;
+  if (currentJuryWasRemoved) {
+    state.juryAccessUnlocked = false;
+    state.juryAccessCode = "";
+    state.juryAccessJury = "";
+    state.session = null;
+  }
   if (!state.juries.includes(state.activeJury)) state.activeJury = state.juries[0] || "Jury";
+  ensureJuryAccessCodes();
   if (state.session?.role === "jury") state.session.name = state.activeJury;
+}
+
+function applyJuryAccessCodeRows(rows = []) {
+  rows
+    .filter(row => row.jury_name && row.access_code)
+    .forEach(row => {
+      state.juryAccessCodes[row.jury_name] = {
+        code: normalizeAccessCode(row.access_code),
+        active: row.active !== false,
+        updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+      };
+    });
+  ensureJuryAccessCodes();
+  if (state.session?.role === "jury" && !juryAccessIsCurrent()) {
+    state.juryAccessUnlocked = false;
+    state.juryAccessCode = "";
+    state.juryAccessJury = "";
+    state.session = null;
+  }
+}
+
+function applyJuryAccessSettingRows(rows = []) {
+  const row = rows.find(item => item.id === true || item.id === 1 || item.id === "true") || rows[0];
+  if (row) state.juryAccessPublic = row.public_access === true;
 }
 
 function applyMadaJuryRows(rows = []) {
@@ -1041,14 +1189,18 @@ async function addMentorAsAdmin(name) {
   if (state.mentors.some(mentor => mentor.toLowerCase() === cleanName.toLowerCase())) throw new Error("This mentor already exists.");
 
   state.mentors = [...state.mentors, cleanName].sort((a, b) => a.localeCompare(b));
+  ensureMentorAccessCodes();
   saveLocal();
 
-  if (!remoteEnabled()) return;
+  if (!remoteEnabled()) return cleanName;
 
   const { error } = await supabaseClient
     .from("mentors")
     .upsert({ name: cleanName, active: true }, { onConflict: "name" });
   if (error) throw error;
+
+  await persistMentorAccessCode(cleanName);
+  return cleanName;
 }
 
 async function deleteMentorAsAdmin(name) {
@@ -1056,7 +1208,14 @@ async function deleteMentorAsAdmin(name) {
   if (state.mentors.length <= 1) throw new Error("Keep at least one mentor.");
 
   state.mentors = state.mentors.filter(mentor => mentor !== name);
-  if (state.activeMentor === name) state.activeMentor = state.mentors[0] || "Mentor";
+  if (state.activeMentor === name) {
+    state.mentorAccessUnlocked = false;
+    state.mentorAccessCode = "";
+    state.mentorAccessMentor = "";
+    if (state.session?.role === "mentor") state.session = null;
+    state.activeMentor = state.mentors[0] || "Mentor";
+  }
+  delete state.mentorAccessCodes[name];
   saveLocal();
 
   if (!remoteEnabled()) return;
@@ -1066,6 +1225,225 @@ async function deleteMentorAsAdmin(name) {
     .delete()
     .eq("name", name);
   if (error) throw error;
+
+  await supabaseClient
+    .from("mentor_access_codes")
+    .delete()
+    .eq("mentor_name", name);
+}
+
+async function persistMentorAccessCode(name) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage mentor codes.");
+  const record = state.mentorAccessCodes?.[name];
+  if (!record?.code || !remoteEnabled()) return;
+
+  const { error } = await supabaseClient
+    .from("mentor_access_codes")
+    .upsert({
+      mentor_name: name,
+      access_code: normalizeAccessCode(record.code),
+      active: record.active !== false
+    }, { onConflict: "mentor_name" });
+  if (error) throw error;
+}
+
+async function regenerateMentorAccessCode(name) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage mentor codes.");
+  if (!state.mentors.includes(name)) throw new Error("Choose a mentor.");
+
+  state.mentorAccessCodes[name] = {
+    code: generateMentorCode(),
+    active: true,
+    updatedAt: new Date().toISOString()
+  };
+  if (state.activeMentor === name && state.session?.role === "mentor") {
+    state.mentorAccessUnlocked = false;
+    state.mentorAccessCode = "";
+    state.mentorAccessMentor = "";
+  }
+  saveLocal();
+  await persistMentorAccessCode(name);
+}
+
+async function regenerateAllMentorAccessCodes() {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage mentor codes.");
+  state.mentors.forEach(name => {
+    state.mentorAccessCodes[name] = {
+      code: generateMentorCode(),
+      active: true,
+      updatedAt: new Date().toISOString()
+    };
+  });
+  state.mentorAccessUnlocked = false;
+  state.mentorAccessCode = "";
+  state.mentorAccessMentor = "";
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const rows = state.mentors.map(name => ({
+    mentor_name: name,
+    access_code: state.mentorAccessCodes[name].code,
+    active: true
+  }));
+  const { error } = await supabaseClient
+    .from("mentor_access_codes")
+    .upsert(rows, { onConflict: "mentor_name" });
+  if (error) throw error;
+}
+
+function mentorForAccessCode(code) {
+  const cleanCode = normalizeAccessCode(code);
+  return state.mentors.find(name => {
+    const record = state.mentorAccessCodes?.[name];
+    return record?.active !== false && normalizeAccessCode(record?.code) === cleanCode;
+  });
+}
+
+async function verifyMentorAccessCode(code) {
+  const cleanCode = normalizeAccessCode(code);
+  if (!cleanCode) return null;
+  if (!remoteEnabled()) return mentorForAccessCode(cleanCode);
+
+  const { data, error } = await supabaseClient.rpc("verify_mentor_access_code", {
+    submitted_code: cleanCode
+  });
+  if (error) throw error;
+  return data || null;
+}
+
+function juryForAccessCode(code) {
+  const cleanCode = normalizeAccessCode(code);
+  return state.juries.find(name => {
+    const record = state.juryAccessCodes?.[name];
+    return record?.active !== false && normalizeAccessCode(record?.code) === cleanCode;
+  });
+}
+
+async function verifyJuryAccessCode(code) {
+  const cleanCode = normalizeAccessCode(code);
+  if (!cleanCode) return null;
+  if (state.juryAccessPublic) return state.activeJury || state.juries[0] || null;
+  if (!remoteEnabled()) return juryForAccessCode(cleanCode);
+
+  const { data, error } = await supabaseClient.rpc("verify_jury_access_code", {
+    submitted_code: cleanCode
+  });
+  if (error) throw error;
+  return data || null;
+}
+
+async function unlockMentorFromAccessCode(code, expectedMentor = "") {
+  const mentorName = await verifyMentorAccessCode(code);
+  if (!mentorName) return null;
+  if (expectedMentor && mentorNameFromSlug(expectedMentor) && mentorNameFromSlug(expectedMentor) !== mentorName) return null;
+
+  state.activeMentor = mentorName;
+  state.mentorAccessUnlocked = true;
+  state.mentorAccessCode = normalizeAccessCode(code);
+  state.mentorAccessMentor = mentorName;
+  state.session = { name: mentorName, role: "mentor" };
+  save();
+  return mentorName;
+}
+
+async function unlockJuryFromAccessCode(code, expectedJury = "") {
+  const juryName = await verifyJuryAccessCode(code);
+  if (!juryName) return null;
+  if (expectedJury && juryNameFromSlug(expectedJury) && juryNameFromSlug(expectedJury) !== juryName) return null;
+
+  state.activeJury = juryName;
+  state.juryAccessUnlocked = true;
+  state.juryAccessCode = normalizeAccessCode(code);
+  state.juryAccessJury = juryName;
+  state.session = { name: juryName, role: "jury" };
+  save();
+  return juryName;
+}
+
+function mentorCodeModal(mentorName, message = "", options = {}) {
+  document.querySelector(".mentor-code-modal")?.remove();
+  const eyebrow = options.eyebrow || "Mentor access";
+  const subtitle = options.subtitle || "Enter your private mentor code to open corrections.";
+
+  return new Promise(resolve => {
+    const modal = document.createElement("div");
+    modal.className = "mentor-code-modal";
+    modal.innerHTML = `<div class="mentor-code-dialog" role="dialog" aria-modal="true" aria-label="${esc(eyebrow)} code"><button class="mentor-code-close" type="button" aria-label="Close">×</button><span class="mentor-code-avatar">${esc(mentorName.slice(0, 1))}</span><p class="eyebrow orange-eyebrow">${esc(eyebrow)}</p><h2>${esc(mentorName)}</h2><p class="subtle">${esc(subtitle)}</p>${message ? `<div class="mentor-code-error">${esc(message)}</div>` : ""}<form><label>Access code<input name="accessCode" type="text" inputmode="text" autocomplete="one-time-code" placeholder="SP-XXXX-XXXX-XXXX" required autofocus></label><div class="mentor-code-buttons"><button class="secondary" type="button" data-cancel>Cancel</button><button class="primary" type="submit">Unlock</button></div></form></div>`;
+
+    const close = value => {
+      modal.remove();
+      resolve(value);
+    };
+
+    modal.addEventListener("click", event => {
+      if (event.target === modal || event.target.closest(".mentor-code-close") || event.target.closest("[data-cancel]")) close("");
+    });
+    modal.querySelector("form").addEventListener("submit", event => {
+      event.preventDefault();
+      close(new FormData(event.target).get("accessCode") || "");
+    });
+
+    document.body.appendChild(modal);
+    modal.querySelector("input")?.focus();
+  });
+}
+
+async function promptForMentorCode(mentorName) {
+  let errorMessage = "";
+
+  while (true) {
+    const submittedCode = await mentorCodeModal(mentorName, errorMessage);
+    if (!submittedCode) return;
+
+    try {
+      const unlockedMentor = await unlockMentorFromAccessCode(submittedCode, mentorSlug(mentorName));
+      if (!unlockedMentor) {
+        errorMessage = "Wrong code for this mentor. Check the latest code from admin.";
+        continue;
+      }
+      showToast(`Mentor page unlocked for ${unlockedMentor}`);
+      mentorDashboard();
+      return;
+    } catch (error) {
+      errorMessage = friendlyError(error, "Could not verify this code. Try again.");
+    }
+  }
+}
+
+async function promptForJuryCode(juryName) {
+  if (state.juryAccessPublic) {
+    state.activeJury = juryName;
+    state.session = { name: juryName, role: "jury" };
+    state.juryAccessUnlocked = true;
+    state.juryAccessJury = juryName;
+    save();
+    miniProjectDashboard();
+    return;
+  }
+
+  let errorMessage = "";
+
+  while (true) {
+    const submittedCode = await mentorCodeModal(juryName, errorMessage, {
+      eyebrow: "Jury access",
+      subtitle: "Enter your private jury code to open scoring."
+    });
+    if (!submittedCode) return;
+
+    try {
+      const unlockedJury = await unlockJuryFromAccessCode(submittedCode, jurySlug(juryName));
+      if (!unlockedJury) {
+        errorMessage = "Wrong code for this jury member. Check the latest code from admin.";
+        continue;
+      }
+      showToast(`Jury page unlocked for ${unlockedJury}`);
+      miniProjectDashboard();
+      return;
+    } catch (error) {
+      errorMessage = friendlyError(error, "Could not verify this code. Try again.");
+    }
+  }
 }
 
 async function addJuryAsAdmin(name) {
@@ -1075,14 +1453,18 @@ async function addJuryAsAdmin(name) {
   if (state.juries.some(jury => jury.toLowerCase() === cleanName.toLowerCase())) throw new Error("This jury member already exists.");
 
   state.juries = [...state.juries, cleanName].sort((a, b) => a.localeCompare(b));
+  ensureJuryAccessCodes();
   saveLocal();
 
-  if (!remoteEnabled()) return;
+  if (!remoteEnabled()) return cleanName;
 
   const { error } = await supabaseClient
     .from("juries")
     .upsert({ name: cleanName, active: true }, { onConflict: "name" });
   if (error) throw error;
+
+  await persistJuryAccessCode(cleanName);
+  return cleanName;
 }
 
 async function renameJuryAsAdmin(oldName, newName) {
@@ -1094,6 +1476,8 @@ async function renameJuryAsAdmin(oldName, newName) {
 
   state.juries = state.juries.map(jury => jury === oldName ? cleanName : jury).sort((a, b) => a.localeCompare(b));
   if (state.activeJury === oldName) state.activeJury = cleanName;
+  state.juryAccessCodes[cleanName] = state.juryAccessCodes[oldName] || { code: generateJuryCode(), active: true, updatedAt: new Date().toISOString() };
+  delete state.juryAccessCodes[oldName];
   Object.values(state.miniProjectReviews).forEach(review => {
     if (review.juryName === oldName) review.juryName = cleanName;
   });
@@ -1107,6 +1491,8 @@ async function renameJuryAsAdmin(oldName, newName) {
     .upsert({ name: cleanName, active: true }, { onConflict: "name" });
   if (upsertError) throw upsertError;
 
+  await persistJuryAccessCode(cleanName);
+
   const { error: reviewError } = await supabaseClient
     .from("mini_project_reviews")
     .update({ jury_name: cleanName })
@@ -1118,6 +1504,11 @@ async function renameJuryAsAdmin(oldName, newName) {
     .delete()
     .eq("name", oldName);
   if (deleteError) throw deleteError;
+
+  await supabaseClient
+    .from("jury_access_codes")
+    .delete()
+    .eq("jury_name", oldName);
 }
 
 async function deleteJuryAsAdmin(name) {
@@ -1125,7 +1516,14 @@ async function deleteJuryAsAdmin(name) {
   if (state.juries.length <= 1) throw new Error("Keep at least one jury member.");
 
   state.juries = state.juries.filter(jury => jury !== name);
-  if (state.activeJury === name) state.activeJury = state.juries[0] || "Jury";
+  if (state.activeJury === name) {
+    state.juryAccessUnlocked = false;
+    state.juryAccessCode = "";
+    state.juryAccessJury = "";
+    if (state.session?.role === "jury") state.session = null;
+    state.activeJury = state.juries[0] || "Jury";
+  }
+  delete state.juryAccessCodes[name];
   saveLocal();
 
   if (!remoteEnabled()) return;
@@ -1134,6 +1532,88 @@ async function deleteJuryAsAdmin(name) {
     .from("juries")
     .delete()
     .eq("name", name);
+  if (error) throw error;
+
+  await supabaseClient
+    .from("jury_access_codes")
+    .delete()
+    .eq("jury_name", name);
+}
+
+async function persistJuryAccessCode(name) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage jury codes.");
+  const record = state.juryAccessCodes?.[name];
+  if (!record?.code || !remoteEnabled()) return;
+
+  const { error } = await supabaseClient
+    .from("jury_access_codes")
+    .upsert({
+      jury_name: name,
+      access_code: normalizeAccessCode(record.code),
+      active: record.active !== false
+    }, { onConflict: "jury_name" });
+  if (error) throw error;
+}
+
+async function regenerateJuryAccessCode(name) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage jury codes.");
+  if (!state.juries.includes(name)) throw new Error("Choose a jury member.");
+
+  state.juryAccessCodes[name] = {
+    code: generateJuryCode(),
+    active: true,
+    updatedAt: new Date().toISOString()
+  };
+  if (state.activeJury === name && state.session?.role === "jury") {
+    state.juryAccessUnlocked = false;
+    state.juryAccessCode = "";
+    state.juryAccessJury = "";
+  }
+  saveLocal();
+  await persistJuryAccessCode(name);
+}
+
+async function regenerateAllJuryAccessCodes() {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage jury codes.");
+  state.juries.forEach(name => {
+    state.juryAccessCodes[name] = {
+      code: generateJuryCode(),
+      active: true,
+      updatedAt: new Date().toISOString()
+    };
+  });
+  state.juryAccessUnlocked = false;
+  state.juryAccessCode = "";
+  state.juryAccessJury = "";
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const rows = state.juries.map(name => ({
+    jury_name: name,
+    access_code: state.juryAccessCodes[name].code,
+    active: true
+  }));
+  const { error } = await supabaseClient
+    .from("jury_access_codes")
+    .upsert(rows, { onConflict: "jury_name" });
+  if (error) throw error;
+}
+
+async function setJuryAccessPublic(value) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can change jury access.");
+  state.juryAccessPublic = Boolean(value);
+  if (state.juryAccessPublic) {
+    state.juryAccessUnlocked = true;
+    state.juryAccessCode = "";
+    state.juryAccessJury = state.activeJury;
+  }
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+  const { error } = await supabaseClient
+    .from("jury_access_settings")
+    .upsert({ id: true, public_access: state.juryAccessPublic }, { onConflict: "id" });
   if (error) throw error;
 }
 
@@ -1281,9 +1761,12 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, juriesResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
+    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
+      includeAdminData ? supabaseClient.from("mentor_access_codes").select("*").order("mentor_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("juries").select("*").order("name", { ascending: true }),
+      includeAdminData ? supabaseClient.from("jury_access_codes").select("*").order("jury_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
+      supabaseClient.from("jury_access_settings").select("*").limit(1),
       supabaseClient.from("mini_project_assignments").select("*").order("group_id", { ascending: true }),
       supabaseClient.from("group_corrections").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("individual_remarks").select("*").order("updated_at", { ascending: false }),
@@ -1302,12 +1785,21 @@ async function loadSharedData(options = {}) {
     if (projectAssignments.error) console.warn("Could not load mini_project_assignments table. Run the topic assignment SQL setup when ready.", projectAssignments.error);
     if (miniReviews.error) console.warn("Could not load mini_project_reviews table. Run the mini project SQL setup when ready.", miniReviews.error);
     if (photoRecords.error) console.warn("Could not load newbie_photos table. Run the photo SQL setup when ready.", photoRecords.error);
+    state.mentorCodeSetupMissing = includeAdminData && Boolean(mentorCodesResult.error);
+    if (state.mentorCodeSetupMissing) console.warn("Could not load mentor_access_codes table. Run the latest setup script to share mentor codes across devices.", mentorCodesResult.error);
+    state.juryCodeSetupMissing = Boolean(jurySettingsResult.error) || (includeAdminData && Boolean(juryCodesResult.error));
+    if (state.juryCodeSetupMissing) console.warn("Could not load jury access tables. Run the latest setup script to share jury codes/settings across devices.", jurySettingsResult.error || juryCodesResult.error);
     if (madaAssignments.error) console.warn("Could not load spoon_madagascar_assignments table. Run the Spoon Madagascar SQL setup when ready.", madaAssignments.error);
     if (madaReviews.error) console.warn("Could not load spoon_madagascar_reviews table. Run the Spoon Madagascar SQL setup when ready.", madaReviews.error);
     if (!mentorsResult.error) applyMentorRows(mentorsResult.data);
     else console.warn("Could not load mentors table; using local mentor list.", mentorsResult.error);
+    if (includeAdminData && !mentorCodesResult.error) applyMentorAccessCodeRows(mentorCodesResult.data);
+    else ensureMentorAccessCodes();
     if (!juriesResult.error) applyJuryRows(juriesResult.data);
     else console.warn("Could not load juries table; using local jury list.", juriesResult.error);
+    if (!jurySettingsResult.error) applyJuryAccessSettingRows(jurySettingsResult.data);
+    if (includeAdminData && !juryCodesResult.error) applyJuryAccessCodeRows(juryCodesResult.data);
+    else ensureJuryAccessCodes();
     if (!madaJuriesResult.error) applyMadaJuryRows(madaJuriesResult.data);
     else console.warn("Could not load spoon_madagascar_juries table; using local jury list.", madaJuriesResult.error);
 
@@ -1358,7 +1850,7 @@ function scheduleRefresh() {
       miniProjectDashboard();
       return;
     }
-    if (!formOpen) mentorDashboard();
+    if (!formOpen) openPublicForm();
   }, 350);
 }
 
@@ -1422,12 +1914,30 @@ function subscribeSharedData() {
         scheduleRefresh();
       }
     })
+    .on("postgres_changes", { event: "*", schema: "public", table: "mentor_access_codes" }, async () => {
+      const { data, error } = await supabaseClient.from("mentor_access_codes").select("*").order("mentor_name", { ascending: true });
+      if (!error) {
+        applyMentorAccessCodeRows(data);
+        scheduleRefresh();
+      }
+    })
     .on("postgres_changes", { event: "*", schema: "public", table: "juries" }, async () => {
       const { data, error } = await supabaseClient.from("juries").select("*").order("name", { ascending: true });
       if (!error) {
         applyJuryRows(data);
         scheduleRefresh();
       }
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "jury_access_codes" }, async () => {
+      const { data, error } = await supabaseClient.from("jury_access_codes").select("*").order("jury_name", { ascending: true });
+      if (!error) {
+        applyJuryAccessCodeRows(data);
+        scheduleRefresh();
+      }
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "jury_access_settings" }, payload => {
+      if (payload.new) applyJuryAccessSettingRows([payload.new]);
+      scheduleRefresh();
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "spoon_madagascar_juries" }, async () => {
       const { data, error } = await supabaseClient.from("spoon_madagascar_juries").select("*").order("name", { ascending: true });
@@ -2043,6 +2553,10 @@ function loginView(message = "") {
   app.innerHTML = `<main class="login"><section class="login-art"><div class="brand"><img class="spoon-logo login-logo" src="https://spoonconsulting.com/wp-content/uploads/elementor/thumbs/Logo-Spoon-Spoon-Consulting-2024-scaled-rah72gsdflipzz9bau5ypzlaz4ldjbb0h0vj24z8x8.webp" alt="Spoon Consulting"></div><div><p class="eyebrow">Protected area</p><h1>Admin.<br><span style="color:#12aaa3">Reports.</span><br><span class="orange-text">Insights.</span></h1><p class="subtle login-copy">The mentor and jury forms are separated. Consolidated feedback and participant reports remain in the protected administrator area.</p></div><button class="secondary public-return" data-action="return-current">${returnLabel}</button></section><section class="login-panel"><form class="login-card" id="login-form"><p class="eyebrow">Administrator access</p><h2>Admin sign in</h2><p class="subtle">Sign in with an approved admin account.</p>${message ? `<div class="notice">${esc(message)}</div>` : ""}<label>Email<input name="email" type="email" placeholder="tega@spoon.hackathon" required></label><label>Password<input name="password" type="password" placeholder="••••••••" required></label><button class="primary" type="submit">Sign in</button>${cfg.demoMode ? `<div class="demo-note"><strong>Preview mode</strong><br>Use any email with password <code>admin</code>.</div>` : `<div class="demo-note"><strong>Protected admin area</strong><br>Only approved administrator accounts can open admin mode.</div>`}</form></section></main>`;
 }
 
+function mentorAccessView(message = "") {
+  app.innerHTML = `<main class="login mentor-code-login"><section class="login-art"><div class="brand"><img class="spoon-logo login-logo" src="https://spoonconsulting.com/wp-content/uploads/elementor/thumbs/Logo-Spoon-Spoon-Consulting-2024-scaled-rah72gsdflipzz9bau5ypzlaz4ldjbb0h0vj24z8x8.webp" alt="Spoon Consulting"></div><div><p class="eyebrow">Mentor access</p><h1>Secure<br><span style="color:#12aaa3">mentor</span><br><span class="orange-text">workspace.</span></h1><p class="subtle login-copy">Enter the code shared by the admin to open the mentor correction page.</p></div><div class="public-return"><button class="secondary" data-action="public-form">← Mentor list</button><button class="secondary" data-action="admin-login">Admin sign in</button></div></section><section class="login-panel"><form class="login-card" id="mentor-code-form"><p class="eyebrow">Mentor code</p><h2>Unlock ${esc(state.activeMentor)}'s page</h2><p class="subtle">This replaces the old open-by-link access.</p>${message ? `<div class="notice">${esc(message)}</div>` : ""}<label>Access code<input name="accessCode" type="text" inputmode="text" autocomplete="one-time-code" placeholder="SP-MENTOR-XXXX-XXXX" required></label><button class="primary" type="submit">Continue</button><div class="demo-note"><strong>Need a code?</strong><br>Ask an admin to open the dashboard and copy your mentor code.</div></form></section></main>`;
+}
+
 function mentorTabs() {
   return `<div class="mentor-tabs" aria-label="Mentor workspaces">${state.mentors.map(name => `<button type="button" class="mentor-tab ${state.activeMentor === name ? "active" : ""}" data-mentor="${name}"><span>${name.slice(0, 1)}</span>${name}</button>`).join("")}</div>`;
 }
@@ -2142,7 +2656,28 @@ function mentorDashboard() {
   shell(`<main class="page simple-page"><nav class="journey" aria-label="Review steps"><span class="active">1 <b>Mentor</b></span><i></i><span>2 <b>Choose group</b></span><i></i><span>3 <b>Submit review</b></span></nav><section class="mentor-choice"><p class="eyebrow orange-eyebrow">Start here</p><h1>Choose your mentor name</h1><p>Tap your name below. We’ll remember it on this device.</p>${mentorTabs()}</section><section class="group-heading"><div><span class="selected-mentor"><i>${state.activeMentor[0]}</i> Reviewing as <strong>${esc(state.activeMentor)}</strong></span><h2>Choose a group</h2></div><div class="status-key"><span><i class="new"></i>Not started</span><span><i class="started"></i>In progress</span><span><i class="complete"></i>Completed</span></div></section><section class="group-list">${state.data.groups.map(group => { const gs = groupState(group); return `<button class="group-row" data-group-review="${group.id}" data-resume-q="${gs.resume}"><span class="group-number">${group.id}</span><span class="group-info"><strong>${esc(group.name)}</strong><small>${group.participants.length} participants · ${gs.completed}/${state.data.questions.length} questions</small></span><span class="group-status ${gs.tone}"><i></i>${gs.label}<small>${gs.detail}</small></span><span class="row-arrow">→</span></button>`; }).join("")}</section><p class="help-line">In-progress groups automatically resume at the first unanswered question. Your review saves to the shared dashboard when connected. <button class="subtle-link" type="button" data-action="mada-jury">Spoon Madagascar jury →</button></p></main>`);
 }
 
-function openMiniProject() {
+async function openMiniProject() {
+  const params = new URLSearchParams(location.search);
+  const urlAccessCode = params.get("juryAccess") || params.get("juryCode") || "";
+  const urlJury = params.get("jury") || "";
+
+  if (urlAccessCode) {
+    try {
+      const juryName = await unlockJuryFromAccessCode(urlAccessCode, urlJury);
+      if (!juryName) {
+        showToast("This jury URL is no longer valid. Ask admin for the latest private URL.");
+        history.replaceState(null, "", `${location.pathname}#mini-project`);
+        return miniProjectLanding();
+      }
+      history.replaceState(null, "", `${location.pathname}#mini-project`);
+      showToast(`Jury page unlocked for ${juryName}`);
+      return miniProjectDashboard();
+    } catch (error) {
+      showToast(friendlyError(error, "Could not verify this jury URL. Try again."));
+      return miniProjectLanding();
+    }
+  }
+
   location.hash = "mini-project";
   state.session = { name: state.activeJury, role: "jury" };
   state.miniProjectView = "landing";
@@ -2323,7 +2858,14 @@ function miniProjectTopicAdminView() {
     ...miniProjectTopics.map(topic => `<option value="${esc(topic.key)}" ${topicKey === topic.key ? "selected" : ""}>${esc(topicFullTitle(topic))}</option>`)
   ].join("");
 
-  return `<article class="card report-card mini-topic-admin-card"><div class="report-heading"><div><p class="eyebrow">Mini-project titles</p><h2>Assign, change, or unassign group topics</h2><p class="subtle">Choose a title to assign/change it, or choose “Unassigned / remove title” to remove it from the jury screens.</p></div><span class="ai-badge">${Object.keys(state.miniProjectAssignments).length}/${state.data.groups.length} assigned</span></div><form id="mini-project-topic-form" class="mini-topic-admin-form"><div class="mini-topic-admin-grid">${state.data.groups.map(group => { const assignment = assignmentForGroup(group); const topic = topicByKey(assignment?.topicKey); return `<label><span><strong>${esc(group.name)}</strong><small>${topic ? `Current: ${esc(topic.title)}` : "Currently unassigned"}</small></span><select name="topic::${group.id}">${topicOptions(assignment?.topicKey)}</select></label>`; }).join("")}</div><details class="mini-topic-options"><summary>View the 3 topic briefs</summary>${miniProjectTopics.map(topic => `<section><strong>${esc(topicFullTitle(topic))}</strong><p>${esc(topic.brief)}</p><small><b>Bonus AI:</b> ${esc(topic.bonus)}</small></section>`).join("")}</details><button class="primary" type="submit">Save title changes</button></form></article>`;
+  return adminAccordion({
+    eyebrow: "Mini-project titles",
+    title: "Assign group topics",
+    subtitle: "Change or remove the titles shown on jury screens.",
+    badge: `${Object.keys(state.miniProjectAssignments).length}/${state.data.groups.length} assigned`,
+    extraClass: "mini-topic-admin-card",
+    content: `<form id="mini-project-topic-form" class="mini-topic-admin-form"><div class="mini-topic-admin-grid">${state.data.groups.map(group => { const assignment = assignmentForGroup(group); const topic = topicByKey(assignment?.topicKey); return `<label><span><strong>${esc(group.name)}</strong><small>${topic ? `Current: ${esc(topic.title)}` : "Currently unassigned"}</small></span><select name="topic::${group.id}">${topicOptions(assignment?.topicKey)}</select></label>`; }).join("")}</div><details class="mini-topic-options"><summary>View the 3 topic briefs</summary>${miniProjectTopics.map(topic => `<section><strong>${esc(topicFullTitle(topic))}</strong><p>${esc(topic.brief)}</p><small><b>Bonus AI:</b> ${esc(topic.bonus)}</small></section>`).join("")}</details><button class="primary" type="submit">Save title changes</button></form>`
+  });
 }
 
 function madaTopicAdminView() {
@@ -2365,7 +2907,30 @@ function madaReviewEditorView() {
 }
 
 function juryAdminView() {
-  return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Jury management</p><h2>Mini-project jury</h2></div><span class="ai-badge">${state.juries.length} active</span></div><form id="jury-form" class="inline-admin-form"><label>Add jury<input name="juryName" type="text" placeholder="Jury name" required></label><button class="primary" type="submit">Add jury</button></form><form id="jury-rename-form" class="inline-admin-form rename-admin-form"><label>Current jury<select name="oldJuryName" required>${state.juries.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select></label><label>New name<input name="newJuryName" type="text" placeholder="Corrected jury name" required></label><button class="secondary" type="submit">Rename jury</button></form><div class="mentor-admin-list">${state.juries.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-jury="${esc(name)}">Delete</button></div>`).join("")}</div></article>`;
+  ensureJuryAccessCodes();
+  const setupWarning = state.juryCodeSetupMissing ? `<div class="notice">Run the latest Supabase setup before sharing jury codes online. Until then, these codes/settings may only work locally.</div>` : "";
+  const juryRows = `<div class="mentor-code-grid">${state.juries.map(name => {
+    const record = state.juryAccessCodes[name] || {};
+    const { code, privateUrl, shareText } = juryAccessDetails(name);
+    return `<div class="mentor-code-row"><span class="avatar">${esc(name[0])}</span><div><strong>${esc(name)}</strong><code>${esc(code)}</code><small class="mentor-url-line">${esc(privateUrl)}</small><small>${record.updatedAt ? `Updated ${new Date(record.updatedAt).toLocaleString()}` : "Ready to share"}</small></div><div class="mentor-code-actions"><button class="secondary" type="button" data-copy-text="${esc(privateUrl)}">Copy URL</button><button class="secondary" type="button" data-copy-text="${esc(code)}">Copy code</button><button class="secondary" type="button" data-copy-text="${esc(shareText)}">Copy share text</button><button class="danger-mini" type="button" data-regenerate-jury-code="${esc(name)}">Regenerate</button></div></div>`;
+  }).join("")}</div>`;
+  return adminAccordion({
+    eyebrow: "Jury management",
+    title: "Mini-project jury",
+    subtitle: state.juryAccessPublic ? "Public mode is on: jury can enter without codes." : "Private mode: jury members need code or private URL.",
+    badge: state.juryAccessPublic ? "Public" : `${state.juries.length} private`,
+    content: `${setupWarning}<div class="admin-toggle-row"><span><strong>Public jury access</strong><small>Turn this on temporarily if code links cause issues. Turn it off to require private jury codes again.</small></span>${state.juryAccessPublic ? `<button class="danger-mini" type="button" data-revoke-jury-public>Revoke public access</button>` : `<button class="primary" type="button" data-make-jury-public>Make jury public</button>`}</div><form id="jury-form" class="inline-admin-form"><label>Add jury<input name="juryName" type="text" placeholder="Jury name" required></label><button class="primary" type="submit">Add jury</button></form><form id="jury-rename-form" class="inline-admin-form rename-admin-form"><label>Current jury<select name="oldJuryName" required>${state.juries.map(name => `<option value="${esc(name)}">${esc(name)}</option>`).join("")}</select></label><label>New name<input name="newJuryName" type="text" placeholder="Corrected jury name" required></label><button class="secondary" type="submit">Rename jury</button></form><div class="mentor-admin-list">${state.juries.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-jury="${esc(name)}">Delete</button></div>`).join("")}</div><div class="subtle-actions admin-accordion-actions"><button class="secondary" type="button" data-regenerate-all-jury-codes>Regenerate all jury codes</button></div>${juryRows}`
+  });
+}
+
+function mentorManagementView() {
+  return adminAccordion({
+    eyebrow: "Mentor management",
+    title: "Spoon mentors",
+    subtitle: "Add mentors and remove old mentor access.",
+    badge: `${state.mentors.length} active`,
+    content: `<form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div>`
+  });
 }
 
 function madaJuryAdminView() {
@@ -2491,14 +3056,80 @@ function photoManagerView() {
   return `<details class="card report-card photo-manager-tab"><summary><span><strong>Newbie photo upload</strong><small>Hidden admin tool · ${uploaded}/${participants.length} uploaded</small></span><span class="ai-badge">Open</span></summary><form id="photo-upload-form" class="photo-upload-form"><label>Upload photo folder or multiple photos<input name="photos" type="file" accept="image/*" multiple webkitdirectory directory></label><button class="primary" type="submit">Upload & match photos</button><p class="subtle">Name files like <code>Sollinselvan Curpen.jpg</code>. The app compresses photos to display size and stores them with private, random file names.</p></form><div class="photo-admin-grid">${participants.map(({ group, person }) => `<div class="${state.participantPhotos[person] ? "has-photo" : ""}">${participantAvatar(person, "medium")}<strong>${esc(person)}</strong><small>${esc(group.name)} · ${state.participantPhotos[person] ? "Photo ready" : "No photo yet"}</small></div>`).join("")}</div></details>`;
 }
 
+function adminAccordion({ eyebrow, title, subtitle = "", badge = "", content = "", open = false, extraClass = "" }) {
+  return `<details class="card report-card admin-accordion ${extraClass}" ${open ? "open" : ""}><summary><span><small class="eyebrow">${esc(eyebrow)}</small><strong>${esc(title)}</strong>${subtitle ? `<em>${esc(subtitle)}</em>` : ""}</span>${badge ? `<span class="ai-badge">${esc(badge)}</span>` : ""}</summary><div class="admin-accordion-body">${content}</div></details>`;
+}
+
+function mentorAccessCodesView() {
+  ensureMentorAccessCodes();
+  const setupWarning = state.mentorCodeSetupMissing ? `<div class="notice">Run the latest <code>supabase/schema.sql</code> before sharing these codes online. Until then, these codes are only local to this browser.</div>` : "";
+  const content = `${setupWarning}<div class="subtle-actions admin-accordion-actions"><button class="secondary" type="button" data-regenerate-all-mentor-codes>Regenerate all</button></div><div class="mentor-code-grid">${state.mentors.map(name => {
+    const record = state.mentorAccessCodes[name] || {};
+    const { code, privateUrl, shareText } = mentorAccessDetails(name);
+    return `<div class="mentor-code-row"><span class="avatar">${esc(name[0])}</span><div><strong>${esc(name)}</strong><code>${esc(code)}</code><small class="mentor-url-line">${esc(privateUrl)}</small><small>${record.updatedAt ? `Updated ${new Date(record.updatedAt).toLocaleString()}` : "Ready to share"}</small></div><div class="mentor-code-actions"><button class="secondary" type="button" data-copy-text="${esc(privateUrl)}">Copy URL</button><button class="secondary" type="button" data-copy-text="${esc(code)}">Copy code</button><button class="secondary" type="button" data-copy-text="${esc(shareText)}">Copy share text</button><button class="danger-mini" type="button" data-regenerate-mentor-code="${esc(name)}">Regenerate</button></div></div>`;
+  }).join("")}</div>`;
+  return adminAccordion({
+    eyebrow: "Secure mentor access",
+    title: "Mentor codes and private URLs",
+    subtitle: "Copy links or regenerate leaked mentor access.",
+    badge: `${state.mentors.length} codes`,
+    extraClass: "mentor-code-admin-card",
+    content
+  });
+}
+
+function auditTrailView() {
+  return adminAccordion({
+    eyebrow: "Audit trail",
+    title: "Recent mentor changes",
+    subtitle: "Latest saved edits and shared-data activity.",
+    badge: syncLabel(),
+    content: `<div class="subtle-actions">${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div>${historyList()}`
+  });
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  document.execCommand("copy");
+  input.remove();
+}
+
 function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${miniProjectTopicAdminView()}${photoManagerView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Mentor management</p><h2>Spoon mentors</h2></div><span class="ai-badge">${state.mentors.length} active</span></div><form id="mentor-form" class="inline-admin-form"><label>Add mentor<input name="mentorName" type="text" placeholder="Mentor name" required></label><button class="primary" type="submit">Add mentor</button></form><div class="mentor-admin-list">${state.mentors.map(name => `<div><span class="avatar">${esc(name[0])}</span><strong>${esc(name)}</strong><button class="danger-mini" data-delete-mentor="${esc(name)}">Delete</button></div>`).join("")}</div></article>${juryAdminView()}<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">Audit trail</p><h2>Recent mentor changes</h2></div><div class="subtle-actions"><span class="ai-badge">${esc(syncLabel())}</span>${state.changeHistory.length ? `<button class="subtle-link" data-action="clear-history">Clear recent changes</button>` : ""}</div></div>${historyList()}</article></section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${mentorManagementView()}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
 }
 
-function openPublicForm() {
+async function openPublicForm() {
+  const params = new URLSearchParams(location.search);
+  const urlAccessCode = params.get("access") || params.get("code") || "";
+  const urlMentor = params.get("mentor") || "";
+
+  if (urlAccessCode) {
+    mentorAccessView("Checking your private mentor URL...");
+    try {
+      const mentorName = await unlockMentorFromAccessCode(urlAccessCode, urlMentor);
+      if (!mentorName) return mentorAccessView("This mentor URL is no longer valid. Ask an admin for the latest private URL.");
+      history.replaceState(null, "", location.pathname);
+      showToast(`Mentor page unlocked for ${mentorName}`);
+      mentorDashboard();
+      return;
+    } catch (error) {
+      return mentorAccessView(friendlyError(error, "Could not verify this mentor URL. Try again."));
+    }
+  }
+
   history.replaceState(null, "", location.pathname);
   state.session = { name: state.activeMentor, role: "mentor" };
   save();
@@ -2528,6 +3159,7 @@ function dashboard() {
   if (location.hash === "#admin") return state.session?.role === "admin" ? adminDashboard(lastAdminMentor) : loginView();
   if (location.hash === "#admin/spoon-madagascar") return state.session?.role === "admin" ? madaAdminPage() : loginView();
   if (location.hash === "#mini-project") {
+    if (!state.juryAccessPublic && !juryAccessIsCurrent()) return openMiniProject();
     state.session = { name: state.activeJury, role: "jury" };
     saveLocal();
     if (state.miniProjectView === "review" && state.activeMiniGroup) return miniProjectReviewView(state.activeMiniGroup);
@@ -2561,12 +3193,32 @@ document.addEventListener("submit", async event => {
     }
   }
 
+  if (event.target.id === "mentor-code-form") {
+    const data = Object.fromEntries(new FormData(event.target));
+    try {
+      const mentorName = await unlockMentorFromAccessCode(data.accessCode);
+      if (!mentorName) return mentorAccessView("This mentor code is not valid. Ask an admin for the latest code.");
+      showToast(`Mentor page unlocked for ${mentorName}`);
+      mentorDashboard();
+    } catch (error) {
+      mentorAccessView(friendlyError(error, "Could not verify this code. Try again."));
+    }
+    return;
+  }
+
   if (event.target.id === "mentor-form") {
     const data = Object.fromEntries(new FormData(event.target));
     try {
-      await addMentorAsAdmin(data.mentorName || "");
-      showToast("✓ Mentor added");
+      const mentorName = await addMentorAsAdmin(data.mentorName || "");
       adminDashboard(lastAdminMentor);
+      const details = mentorAccessDetails(mentorName);
+      try {
+        await copyTextToClipboard(details.shareText);
+        showToast("✓ Mentor added. URL + code copied.");
+      } catch (copyError) {
+        showToast("✓ Mentor added. URL + code are shown in the dashboard.");
+      }
+      alert(`New mentor created: ${mentorName}\n\nPrivate URL:\n${details.privateUrl}\n\nBackup code:\n${details.code}`);
     } catch (error) {
       showToast(friendlyError(error, "Could not add mentor. Try again."));
     }
@@ -2575,9 +3227,16 @@ document.addEventListener("submit", async event => {
   if (event.target.id === "jury-form") {
     const data = Object.fromEntries(new FormData(event.target));
     try {
-      await addJuryAsAdmin(data.juryName || "");
-      showToast("✓ Jury added");
+      const juryName = await addJuryAsAdmin(data.juryName || "");
       adminDashboard(lastAdminMentor);
+      const details = juryAccessDetails(juryName);
+      try {
+        await copyTextToClipboard(details.shareText);
+        showToast("✓ Jury added. URL + code copied.");
+      } catch (copyError) {
+        showToast("✓ Jury added. URL + code are shown in the dashboard.");
+      }
+      alert(`New jury created: ${juryName}\n\nPrivate URL:\n${details.privateUrl}\n\nBackup code:\n${details.code}`);
     } catch (error) {
       showToast(friendlyError(error, "Could not add jury. Try again."));
     }
@@ -2651,6 +3310,10 @@ document.addEventListener("submit", async event => {
   }
 
   if (event.target.id === "mini-project-form") {
+    if (!state.juryAccessPublic && !juryAccessIsCurrent()) {
+      await promptForJuryCode(state.activeJury);
+      if (!juryAccessIsCurrent()) return;
+    }
     const submitter = event.submitter;
     const destination = submitter?.value || "stay";
     const payload = miniProjectPayloadFromForm(event.target);
@@ -2804,6 +3467,98 @@ document.addEventListener("click", async event => {
     openPhotoViewer(button.dataset.photoUrl, button.dataset.photoName || "Participant");
     return;
   }
+  if (button.dataset.copyText !== undefined) {
+    try {
+      await copyTextToClipboard(button.dataset.copyText);
+      showToast("Copied");
+    } catch (error) {
+      showToast("Could not copy automatically. Select the code and copy it manually.");
+    }
+    return;
+  }
+  if (button.dataset.regenerateMentorCode) {
+    const name = button.dataset.regenerateMentorCode;
+    const ok = confirm(`Regenerate ${name}'s mentor access code? Their old code will stop being the shared current code.`);
+    if (!ok) return;
+
+    try {
+      await regenerateMentorAccessCode(name);
+      showToast(`✓ New code generated for ${name}`);
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not regenerate mentor code. Try again."));
+    }
+    return;
+  }
+  if (button.dataset.regenerateAllMentorCodes !== undefined) {
+    const ok = confirm("Regenerate all mentor access codes? You will need to share the new codes with every mentor.");
+    if (!ok) return;
+
+    try {
+      await regenerateAllMentorAccessCodes();
+      showToast("✓ All mentor codes regenerated");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not regenerate mentor codes. Try again."));
+    }
+    return;
+  }
+  if (button.dataset.regenerateJuryCode) {
+    const name = button.dataset.regenerateJuryCode;
+    const ok = confirm(`Regenerate ${name}'s jury access code? Their old private URL will stop working.`);
+    if (!ok) return;
+
+    try {
+      await regenerateJuryAccessCode(name);
+      showToast(`✓ New jury code generated for ${name}`);
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not regenerate jury code. Try again."));
+    }
+    return;
+  }
+  if (button.dataset.regenerateAllJuryCodes !== undefined) {
+    const ok = confirm("Regenerate all jury access codes? You will need to share the new jury links.");
+    if (!ok) return;
+
+    try {
+      await regenerateAllJuryAccessCodes();
+      showToast("✓ All jury codes regenerated");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not regenerate jury codes. Try again."));
+    }
+    return;
+  }
+  if (button.dataset.makeJuryPublic !== undefined) {
+    const ok = confirm("Make jury access public? Jury members will be able to enter without private codes until you revoke it.");
+    if (!ok) return;
+
+    try {
+      await setJuryAccessPublic(true);
+      showToast("✓ Jury access is public");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not make jury access public."));
+    }
+    return;
+  }
+  if (button.dataset.revokeJuryPublic !== undefined) {
+    const ok = confirm("Revoke public jury access and require private jury codes again?");
+    if (!ok) return;
+
+    try {
+      await setJuryAccessPublic(false);
+      state.juryAccessUnlocked = false;
+      state.juryAccessCode = "";
+      state.juryAccessJury = "";
+      showToast("✓ Public jury access revoked");
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not revoke public jury access."));
+    }
+    return;
+  }
   if (button.dataset.action === "close-photo") {
     closePhotoViewer();
     return;
@@ -2833,6 +3588,7 @@ document.addEventListener("click", async event => {
     return;
   }
   if (button.dataset.action === "mini-dashboard") {
+    if (!state.juryAccessPublic && !juryAccessIsCurrent()) return miniProjectLanding();
     miniProjectDashboard();
     return;
   }
@@ -2867,32 +3623,69 @@ document.addEventListener("click", async event => {
     return;
   }
   if (button.dataset.mentor) {
-    if (state.activeMentor === button.dataset.mentor && state.session?.role === "mentor") return;
+    if (state.activeMentor === button.dataset.mentor && mentorAccessIsCurrent()) return;
     state.activeMentor = button.dataset.mentor;
-    state.session.name = state.activeMentor;
+    state.mentorAccessUnlocked = false;
+    state.mentorAccessCode = "";
+    state.mentorAccessMentor = "";
+    state.session = null;
     save();
-    mentorDashboard();
+    await promptForMentorCode(state.activeMentor);
+    return;
   }
   if (button.dataset.jury) {
-    if (state.activeJury !== button.dataset.jury || state.session?.role !== "jury") {
-      state.activeJury = button.dataset.jury;
-      state.session = { name: state.activeJury, role: "jury" };
-      save();
-    }
-    miniProjectDashboard();
+    state.activeJury = button.dataset.jury;
+    state.juryAccessUnlocked = false;
+    state.juryAccessCode = "";
+    state.juryAccessJury = "";
+    state.session = { name: state.activeJury, role: "jury" };
+    save();
+    await promptForJuryCode(state.activeJury);
     return;
   }
   if (button.dataset.miniGroup) {
+    if (!state.juryAccessPublic && !juryAccessIsCurrent()) {
+      await promptForJuryCode(state.activeJury);
+      if (!juryAccessIsCurrent()) return;
+    }
     miniProjectReviewView(button.dataset.miniGroup);
     return;
   }
   if (button.dataset.groupReview) {
+    if (!mentorAccessIsCurrent()) {
+      state.mentorAccessUnlocked = false;
+      state.mentorAccessCode = "";
+      state.mentorAccessMentor = "";
+      state.session = null;
+      save();
+      await promptForMentorCode(state.activeMentor);
+      if (!mentorAccessIsCurrent()) return;
+      const group = groupById(button.dataset.groupReview);
+      const qid = Number(button.dataset.resumeQ || 1);
+      await markQuestionInProgress(group, qid);
+      correctionView(group.id, qid);
+      return;
+    }
     const group = groupById(button.dataset.groupReview);
     const qid = Number(button.dataset.resumeQ || 1);
     await markQuestionInProgress(group, qid);
     correctionView(group.id, qid);
   }
   if (button.dataset.groupQ) {
+    if (!mentorAccessIsCurrent()) {
+      state.mentorAccessUnlocked = false;
+      state.mentorAccessCode = "";
+      state.mentorAccessMentor = "";
+      state.session = null;
+      save();
+      await promptForMentorCode(state.activeMentor);
+      if (!mentorAccessIsCurrent()) return;
+      const group = groupById(button.dataset.groupQ);
+      const qid = Number(button.dataset.q);
+      await markQuestionInProgress(group, qid);
+      correctionView(group.id, qid);
+      return;
+    }
     const group = groupById(button.dataset.groupQ);
     const qid = Number(button.dataset.q);
     await markQuestionInProgress(group, qid);
