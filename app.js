@@ -3259,16 +3259,16 @@ function usefulFeedbackSummary(person, group) {
   const adminNotes = participantAdminNotes("mauritius", person).map(item => item.note);
   const notes = [...adminNotes, ...participantQuestionNotes(person, group).map(item => item.note), ...participantMiniNotes(person, group).map(item => item.note)].filter(Boolean);
   const evidence = notes.slice(0, 2).join(" ");
-  if (!notes.length) return `${person} has no saved individual notes yet. Current available evidence is group-level only: ${group.name} has ${completedQuestionFeedback(group).length}/${state.data.questions.length} completed question review(s) and mini-project average ${miniProjectAverage(group)}/${miniProjectTotal}.`;
-  return `${person}: ${evidence}`;
+  if (!notes.length) return `${person} does not yet have individual feedback saved; the available context is group-level only, with ${group.name} having ${completedQuestionFeedback(group).length}/${state.data.questions.length} completed question review(s) and a mini-project average of ${miniProjectAverage(group)}/${miniProjectTotal}.`;
+  return `${person}'s available individual feedback indicates: ${evidence}`;
 }
 
 function usefulMadaFeedbackSummary(person, group) {
   const adminNotes = participantAdminNotes("madagascar", person).map(item => item.note);
   const notes = [...adminNotes, ...participantMadaNotes(person).map(item => item.note)].filter(Boolean);
   const evidence = notes.slice(0, 2).join(" ");
-  if (!notes.length) return `${person} has no saved individual notes yet. Current available evidence is group-level only: ${group.name} mini-project average ${madaGroupAverage(group)}/${madaProjectTotal}.`;
-  return `${person}: ${evidence}`;
+  if (!notes.length) return `${person} does not yet have individual feedback saved; the available context is group-level only, with ${group.name} having a mini-project average of ${madaGroupAverage(group)}/${madaProjectTotal}.`;
+  return `${person}'s available individual feedback indicates: ${evidence}`;
 }
 
 function fallbackStakeholderPersonSummary(person, group, isMada) {
