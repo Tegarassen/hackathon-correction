@@ -134,10 +134,14 @@ state = {
   stakeholderAccessCodes: state.stakeholderAccessCodes || {},
   stakeholderCodeSetupMissing: false,
   stakeholderSummaries: state.stakeholderSummaries || {},
+  stakeholderPersonSummaries: state.stakeholderPersonSummaries || {},
+  stakeholderSummaryStatus: state.stakeholderSummaryStatus || {},
+  stakeholderSummaryError: state.stakeholderSummaryError || {},
   mentors: state.mentors || defaultMentors,
   juries: state.juries || defaultJuries,
   groupCorrections: state.groupCorrections || {},
   individualRemarks: state.individualRemarks || {},
+  adminIndividualFeedback: state.adminIndividualFeedback || {},
   miniProjectReviews: state.miniProjectReviews || {},
   miniProjectAssignments: state.miniProjectAssignments || {},
   miniProjectView: state.miniProjectView || "landing",
@@ -152,6 +156,7 @@ state = {
   activeMadaGroup: state.activeMadaGroup || null,
   participantPhotos: state.participantPhotos || {},
   photoUrls: state.photoUrls || {},
+  aiUsageEvents: state.aiUsageEvents || [],
   reports: state.reports || {},
   changeHistory: state.changeHistory || [],
   syncStatus: "loading",
@@ -171,6 +176,8 @@ let refreshTimer = null;
 let madaRefreshTimer = null;
 let miniAutosaveTimer = null;
 let miniAutosaveSignature = "";
+const stakeholderAIInFlight = {};
+const stakeholderAISessionAttempts = {};
 
 const saveLocal = () => localStorage.setItem("spoon-state-v2", JSON.stringify(state));
 const save = saveLocal;
@@ -844,6 +851,14 @@ function remarkKey(groupId, person, qid) {
   return `${groupId}|${person}|${qid}`;
 }
 
+function adminFeedbackKey(eventKey, person) {
+  return `${eventKey}|${person}`;
+}
+
+function stakeholderPersonSummaryKey(eventKey, person) {
+  return `${eventKey}|${person}`;
+}
+
 function miniReviewKey(groupId, juryName) {
   return `${groupId}|${juryName}`;
 }
@@ -858,15 +873,17 @@ const normalizePhotoName = value => String(value || "")
 const initials = name => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
 const photoFor = person => state.photoUrls?.[person] || "";
 
-function participantAvatar(person, size = "small") {
+function participantAvatar(person, size = "small", clickable = true) {
   const url = photoFor(person);
   return url
-    ? `<button type="button" class="photo-open" data-photo-url="${esc(url)}" data-photo-name="${esc(person)}" title="Open ${esc(person)} photo"><img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false"></button>`
+    ? clickable
+      ? `<button type="button" class="photo-open" data-photo-url="${esc(url)}" data-photo-name="${esc(person)}" title="Open ${esc(person)} photo"><img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false"></button>`
+      : `<img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false">`
     : `<span class="participant-photo placeholder ${size}">${esc(initials(person))}</span>`;
 }
 
-function participantNameBlock(person) {
-  return `<span class="participant-name-block">${participantAvatar(person)}<span>${esc(person)}</span></span>`;
+function participantNameBlock(person, size = "small", clickablePhoto = true) {
+  return `<span class="participant-name-block">${participantAvatar(person, size, clickablePhoto)}<span>${esc(person)}</span></span>`;
 }
 
 function matchParticipantFromFile(file) {
@@ -1048,6 +1065,29 @@ function removeIndividualRemarkRow(row) {
   delete state.individualRemarks[remarkKey(row.group_id, row.participant_name, row.question_position)];
 }
 
+function applyAdminIndividualFeedbackRow(row) {
+  if (!row) return;
+  const eventKey = row.event_key || "mauritius";
+  const key = adminFeedbackKey(eventKey, row.participant_name);
+  if (row.feedback?.trim()) {
+    state.adminIndividualFeedback[key] = {
+      eventKey,
+      groupId: Number(row.group_id),
+      groupName: row.group_name || "",
+      participantName: row.participant_name,
+      feedback: row.feedback,
+      adminName: row.admin_name || "Admin",
+      updatedAt: row.updated_at
+    };
+  }
+  else delete state.adminIndividualFeedback[key];
+}
+
+function removeAdminIndividualFeedbackRow(row) {
+  if (!row) return;
+  delete state.adminIndividualFeedback[adminFeedbackKey(row.event_key || "mauritius", row.participant_name)];
+}
+
 function applyMiniProjectReviewRow(row) {
   if (!row) return;
   state.miniProjectReviews[miniReviewKey(row.group_id, row.jury_name)] = {
@@ -1123,6 +1163,34 @@ function removeMadaAssignmentRow(row) {
 function applyReportRow(row) {
   if (!row) return;
   state.reports[row.report_key] = row.content || "";
+}
+
+function applyAIUsageRows(rows = []) {
+  state.aiUsageEvents = rows
+    .filter(row => row?.created_at)
+    .map(row => ({
+      eventKey: row.event_key || "",
+      model: row.model || "",
+      promptTokens: Number(row.prompt_tokens || 0),
+      outputTokens: Number(row.output_tokens || 0),
+      totalTokens: Number(row.total_tokens || 0),
+      createdAt: row.created_at
+    }));
+}
+
+function applyAIUsageRow(row) {
+  if (!row?.created_at) return;
+  state.aiUsageEvents = [
+    {
+      eventKey: row.event_key || "",
+      model: row.model || "",
+      promptTokens: Number(row.prompt_tokens || 0),
+      outputTokens: Number(row.output_tokens || 0),
+      totalTokens: Number(row.total_tokens || 0),
+      createdAt: row.created_at
+    },
+    ...(state.aiUsageEvents || [])
+  ].slice(0, 500);
 }
 
 function removeReportRow(row) {
@@ -1914,7 +1982,7 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, stakeholderCodesResult, eventGroupsResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
+    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, stakeholderCodesResult, eventGroupsResult, projectAssignments, corrections, remarks, adminFeedback, miniReviews, photoRecords, reports, aiUsage, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       includeAdminData ? supabaseClient.from("mentor_access_codes").select("*").order("mentor_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("juries").select("*").order("name", { ascending: true }),
@@ -1925,9 +1993,11 @@ async function loadSharedData(options = {}) {
       supabaseClient.from("mini_project_assignments").select("*").order("group_id", { ascending: true }),
       supabaseClient.from("group_corrections").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("individual_remarks").select("*").order("updated_at", { ascending: false }),
+      supabaseClient.from("admin_individual_feedback").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("mini_project_reviews").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("newbie_photos").select("*").order("updated_at", { ascending: false }),
       includeAdminData ? supabaseClient.from("ai_reports").select("*").order("generated_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
+      includeAdminData ? supabaseClient.from("ai_usage_events").select("*").order("created_at", { ascending: false }).limit(500) : Promise.resolve({ data: [], error: null }),
       includeAdminData ? supabaseClient.from("change_history").select("*").order("changed_at", { ascending: false }).limit(50) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("spoon_madagascar_juries").select("*").order("name", { ascending: true }),
       supabaseClient.from("spoon_madagascar_assignments").select("*").order("group_id", { ascending: true }),
@@ -1939,7 +2009,9 @@ async function loadSharedData(options = {}) {
     }
     if (projectAssignments.error) console.warn("Could not load mini_project_assignments table. Run the topic assignment SQL setup when ready.", projectAssignments.error);
     if (miniReviews.error) console.warn("Could not load mini_project_reviews table. Run the mini project SQL setup when ready.", miniReviews.error);
+    if (adminFeedback.error) console.warn("Could not load admin_individual_feedback table. Run the latest setup script to let admins add stakeholder notes.", adminFeedback.error);
     if (photoRecords.error) console.warn("Could not load newbie_photos table. Run the photo SQL setup when ready.", photoRecords.error);
+    if (includeAdminData && aiUsage.error) console.warn("Could not load ai_usage_events table. Run the latest setup script to show AI usage.", aiUsage.error);
     state.mentorCodeSetupMissing = includeAdminData && Boolean(mentorCodesResult.error);
     if (state.mentorCodeSetupMissing) console.warn("Could not load mentor_access_codes table. Run the latest setup script to share mentor codes across devices.", mentorCodesResult.error);
     state.juryCodeSetupMissing = Boolean(jurySettingsResult.error) || (includeAdminData && Boolean(juryCodesResult.error));
@@ -1966,6 +2038,7 @@ async function loadSharedData(options = {}) {
 
     state.groupCorrections = {};
     state.individualRemarks = {};
+    state.adminIndividualFeedback = {};
     state.miniProjectReviews = {};
     state.miniProjectAssignments = {};
     state.madaReviews = {};
@@ -1974,6 +2047,7 @@ async function loadSharedData(options = {}) {
 
     corrections.data.forEach(applyGroupCorrectionRow);
     remarks.data.forEach(applyIndividualRemarkRow);
+    if (!adminFeedback.error) adminFeedback.data.forEach(applyAdminIndividualFeedbackRow);
     if (!projectAssignments.error) projectAssignments.data.forEach(applyMiniProjectAssignmentRow);
     if (!miniReviews.error) miniReviews.data.forEach(applyMiniProjectReviewRow);
     if (!madaAssignments.error) madaAssignments.data.forEach(applyMadaAssignmentRow);
@@ -1982,6 +2056,7 @@ async function loadSharedData(options = {}) {
     await hydratePhotoUrls();
     if (includeAdminData) {
       reports.data.forEach(applyReportRow);
+      applyAIUsageRows(aiUsage.error ? [] : aiUsage.data);
       state.changeHistory = history.data || [];
     }
     state.syncStatus = "online";
@@ -1998,7 +2073,7 @@ function scheduleRefresh() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     saveLocal();
-    const formOpen = Boolean(document.querySelector("#group-review-form, #mini-project-form, #mini-project-topic-form, .admin-mini-review-form"));
+    const formOpen = Boolean(document.querySelector("#group-review-form, #mini-project-form, #mini-project-topic-form, #admin-individual-feedback-form, .admin-mini-review-form"));
     if (location.hash === "#admin" && state.session?.role === "admin") {
       adminDashboard(lastAdminMentor);
       return;
@@ -2025,7 +2100,7 @@ function scheduleMadaRefresh() {
   clearTimeout(madaRefreshTimer);
   madaRefreshTimer = setTimeout(() => {
     saveLocal();
-    const formOpen = Boolean(document.querySelector("#mada-review-form, #mada-topic-form, .admin-mada-review-form"));
+    const formOpen = Boolean(document.querySelector("#mada-review-form, #mada-topic-form, #admin-individual-feedback-form, .admin-mada-review-form"));
     if (formOpen) return;
     if (location.hash === "#admin/spoon-madagascar" && state.session?.role === "admin") {
       madaAdminPage();
@@ -2053,6 +2128,12 @@ function subscribeSharedData() {
       else applyIndividualRemarkRow(payload.new);
       scheduleRefresh();
     })
+    .on("postgres_changes", { event: "*", schema: "public", table: "admin_individual_feedback" }, payload => {
+      if (payload.eventType === "DELETE") removeAdminIndividualFeedbackRow(payload.old);
+      else applyAdminIndividualFeedbackRow(payload.new);
+      scheduleRefresh();
+      scheduleMadaRefresh();
+    })
     .on("postgres_changes", { event: "*", schema: "public", table: "mini_project_reviews" }, payload => {
       if (payload.eventType === "DELETE") removeMiniProjectReviewRow(payload.old);
       else applyMiniProjectReviewRow(payload.new);
@@ -2073,6 +2154,11 @@ function subscribeSharedData() {
       if (payload.eventType === "DELETE") removeReportRow(payload.old);
       else applyReportRow(payload.new);
       scheduleRefresh();
+    })
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "ai_usage_events" }, payload => {
+      applyAIUsageRow(payload.new);
+      scheduleRefresh();
+      scheduleMadaRefresh();
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "mentors" }, async () => {
       const { data, error } = await supabaseClient.from("mentors").select("*").order("name", { ascending: true });
@@ -2655,6 +2741,70 @@ async function deleteMiniReviewAsAdmin(groupId, juryName) {
   if (error) throw error;
 }
 
+async function persistAdminIndividualFeedbackAsAdmin(eventKey, data) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can add individual feedback.");
+  const isMada = eventKey === "madagascar";
+  const groups = isMada ? madaGroups() : state.data.groups;
+  const adminName = state.session?.email || state.session?.name || "Admin";
+  const now = new Date().toISOString();
+  const rows = [];
+  const deletions = [];
+  clearStakeholderAISummaries(eventKey);
+
+  groups.forEach(group => {
+    (group.participants || []).forEach(person => {
+      const feedback = String(data[`adminFeedback::${person}`] || "").trim();
+      const key = adminFeedbackKey(eventKey, person);
+      delete state.reports[`${isMada ? "mada-person" : "person"}|${person}`];
+
+      if (feedback) {
+        const record = {
+          eventKey,
+          groupId: Number(group.id),
+          groupName: group.name,
+          participantName: person,
+          feedback,
+          adminName,
+          updatedAt: now
+        };
+        state.adminIndividualFeedback[key] = record;
+        rows.push({
+          event_key: eventKey,
+          group_id: Number(group.id),
+          group_name: group.name,
+          participant_name: person,
+          feedback,
+          admin_name: adminName
+        });
+      } else if (state.adminIndividualFeedback[key]) {
+        delete state.adminIndividualFeedback[key];
+        deletions.push({ eventKey, person });
+      }
+    });
+  });
+
+  saveLocal();
+  if (!remoteEnabled()) return;
+
+  const jobs = [];
+  if (rows.length) {
+    jobs.push(supabaseClient
+      .from("admin_individual_feedback")
+      .upsert(rows, { onConflict: "event_key,participant_name" }));
+  }
+  deletions.forEach(item => {
+    jobs.push(supabaseClient
+      .from("admin_individual_feedback")
+      .delete()
+      .eq("event_key", item.eventKey)
+      .eq("participant_name", item.person));
+  });
+
+  const results = await Promise.all(jobs);
+  const error = results.find(result => result.error)?.error;
+  if (error) throw error;
+}
+
 async function persistMadaReviewAsAdmin(review) {
   if (state.session?.role !== "admin") throw new Error("Only admin can edit Spoon Madagascar jury feedback.");
 
@@ -3046,8 +3196,16 @@ function completedQuestionFeedback(group) {
 function participantStakeholderFeedback(person, group) {
   const questionNotes = participantQuestionNotes(person, group).map(item => `Q${item.qid} by ${item.mentor}: ${item.note}`);
   const miniNotes = participantMiniNotes(person, group).map(item => `${item.jury}: ${item.note}`);
-  const notes = [...questionNotes, ...miniNotes];
+  const adminNotes = participantAdminNotes("mauritius", person).map(item => `Admin: ${item.note}`);
+  const notes = [...adminNotes, ...questionNotes, ...miniNotes];
   return notes.length ? notes.join(" · ") : "No individual stakeholder feedback yet.";
+}
+
+function participantAdminNotes(eventKey, person) {
+  const note = state.adminIndividualFeedback?.[adminFeedbackKey(eventKey, person)];
+  return note?.feedback?.trim()
+    ? [{ admin: note.adminName || "Admin", note: note.feedback, updatedAt: note.updatedAt }]
+    : [];
 }
 
 function participantQuestionNotes(person, group) {
@@ -3089,6 +3247,46 @@ function participantMadaNotes(person) {
     }));
 }
 
+function stakeholderLevel(value, max) {
+  const ratio = Number(max) > 0 ? Number(value) / Number(max) : 0;
+  if (ratio >= 0.75) return "strong";
+  if (ratio >= 0.5) return "promising";
+  if (ratio > 0) return "developing";
+  return "not enough scored evidence yet";
+}
+
+function usefulFeedbackSummary(person, group) {
+  const adminNotes = participantAdminNotes("mauritius", person).map(item => item.note);
+  const notes = [...adminNotes, ...participantQuestionNotes(person, group).map(item => item.note), ...participantMiniNotes(person, group).map(item => item.note)].filter(Boolean);
+  const evidence = notes.slice(0, 2).join(" ");
+  if (!notes.length) return `${person} has no saved individual notes yet. Current available evidence is group-level only: ${group.name} has ${completedQuestionFeedback(group).length}/${state.data.questions.length} completed question review(s) and mini-project average ${miniProjectAverage(group)}/${miniProjectTotal}.`;
+  return `${person}: ${evidence}`;
+}
+
+function usefulMadaFeedbackSummary(person, group) {
+  const adminNotes = participantAdminNotes("madagascar", person).map(item => item.note);
+  const notes = [...adminNotes, ...participantMadaNotes(person).map(item => item.note)].filter(Boolean);
+  const evidence = notes.slice(0, 2).join(" ");
+  if (!notes.length) return `${person} has no saved individual notes yet. Current available evidence is group-level only: ${group.name} mini-project average ${madaGroupAverage(group)}/${madaProjectTotal}.`;
+  return `${person}: ${evidence}`;
+}
+
+function fallbackStakeholderPersonSummary(person, group, isMada) {
+  return isMada ? usefulMadaFeedbackSummary(person, group) : usefulFeedbackSummary(person, group);
+}
+
+function stakeholderPersonSummary(eventKey, person, group, isMada) {
+  return state.stakeholderPersonSummaries?.[stakeholderPersonSummaryKey(eventKey, person)]
+    || fallbackStakeholderPersonSummary(person, group, isMada);
+}
+
+function stakeholderWinnerView(eventKey, rows) {
+  const winner = rows.find(row => (row.total ?? row.average ?? 0) > 0) || rows[0];
+  if (!winner) return "";
+  const score = winner.total !== undefined ? `${winner.total}/${winner.max}` : `${winner.average}/${winner.max}`;
+  return `<section class="card report-card stakeholder-winner-card"><div><p class="eyebrow">Hackathon winner</p><h2>${esc(winner.group.name)}</h2><p class="subtle">${esc(stakeholderEventLabel(eventKey))} winner based on the current saved scores.</p></div><span>${esc(score)}</span></section>`;
+}
+
 function stakeholderMetricStrip(metrics) {
   return `<div class="stakeholder-metric-strip">${metrics.map(metric => `<div><strong>${esc(metric.value)}</strong><span>${esc(metric.label)}</span></div>`).join("")}</div>`;
 }
@@ -3111,18 +3309,38 @@ function stakeholderMadaScoreList(group) {
   return `<div class="stakeholder-score-pills">${reviews.map(review => `<span>${esc(madaFirstName(review.juryName || "Jury"))}: ${madaProjectScore(review)}/${madaProjectTotal}</span>`).join("")}</div>`;
 }
 
-function stakeholderNewbieCard(person, group) {
+function stakeholderNewbieDetails(person, group) {
+  const adminNotes = participantAdminNotes("mauritius", person);
   const questionNotes = participantQuestionNotes(person, group);
   const miniNotes = participantMiniNotes(person, group);
-  const noteCount = questionNotes.length + miniNotes.length;
-  const summary = participantStakeholderFeedback(person, group);
-  return `<details class="stakeholder-newbie-card"><summary>${participantNameBlock(person)}<span>${noteCount} note${noteCount === 1 ? "" : "s"}</span></summary><div class="stakeholder-newbie-body"><p>${esc(summary)}</p><div class="stakeholder-newbie-points"><span>Group question score: <b>${groupScore(group)}/${knownTotalMarks()}</b></span><span>Mini-project average: <b>${miniProjectAverage(group)}/${miniProjectTotal}</b></span></div>${questionNotes.length ? `<h4>Question feedback</h4><ul>${questionNotes.map(item => `<li><b>Q${esc(item.qid)} · ${esc(item.mentor)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${miniNotes.length ? `<h4>Mini-project feedback</h4><ul>${miniNotes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}</div></details>`;
+  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${questionNotes.length ? `<h4>Mentor question feedback</h4><ul>${questionNotes.map(item => `<li><b>Q${esc(item.qid)} · ${esc(item.mentor)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual mentor notes from completed questions yet.</p>`}${miniNotes.length ? `<h4>Jury mini-project feedback</h4><ul>${miniNotes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
 }
 
-function stakeholderMadaNewbieCard(person, group) {
+function stakeholderMadaNewbieDetails(person, group) {
+  const adminNotes = participantAdminNotes("madagascar", person);
   const notes = participantMadaNotes(person);
-  const summary = buildMadaPersonFeedback(person);
-  return `<details class="stakeholder-newbie-card"><summary>${participantNameBlock(person)}<span>${notes.length} note${notes.length === 1 ? "" : "s"}</span></summary><div class="stakeholder-newbie-body"><p>${esc(summary)}</p><div class="stakeholder-newbie-points"><span>Group mini-project average: <b>${madaGroupAverage(group)}/${madaProjectTotal}</b></span><span>Office: <b>${esc(group.office || "—")}</b></span></div>${notes.length ? `<h4>Mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}</div></details>`;
+  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${notes.length ? `<h4>Jury mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
+}
+
+function stakeholderIndividualRow(person, group, isMada, eventKey) {
+  const summary = stakeholderPersonSummary(eventKey, person, group, isMada);
+  const noteCount = (isMada ? participantMadaNotes(person).length : participantQuestionNotes(person, group).length + participantMiniNotes(person, group).length) + participantAdminNotes(isMada ? "madagascar" : "mauritius", person).length;
+  const groupScoreCopy = isMada ? `${madaGroupAverage(group)}/${madaProjectTotal}` : `${groupScore(group)}/${knownTotalMarks()}`;
+  const miniCopy = isMada ? `${madaGroupAverage(group)}/${madaProjectTotal}` : `${miniProjectAverage(group)}/${miniProjectTotal}`;
+  const extraGroupCopy = isMada ? `Office: ${group.office || "—"}` : `${completedQuestionFeedback(group).length}/${state.data.questions.length} questions complete`;
+  return `<tr><td data-label="Newbie">${participantNameBlock(person, "stakeholder", false)}<small>${esc(noteCount)} note${noteCount === 1 ? "" : "s"}</small></td><td data-label="Summary"><p class="stakeholder-ai-summary">${esc(summary)}</p></td><td data-label="Group"><strong>${esc(group.name)}</strong><small>${esc(extraGroupCopy)}</small></td><td data-label="Question / group points"><strong>${esc(groupScoreCopy)}</strong><small>${isMada ? "Group mini-project average" : "Question points"}</small></td><td data-label="Mini-project"><strong>${esc(miniCopy)}</strong><small>Mini-project context</small></td><td data-label="Further info">${isMada ? stakeholderMadaNewbieDetails(person, group) : stakeholderNewbieDetails(person, group)}</td></tr>`;
+}
+
+function stakeholderIndividualDashboard(eventKey) {
+  const isMada = eventKey === "madagascar";
+  const people = isMada
+    ? madaGroups().flatMap(group => group.participants.map(person => ({ group, person })))
+    : state.data.groups.flatMap(group => group.participants.map(person => ({ group, person })));
+  const status = state.stakeholderSummaryStatus?.[eventKey] || "local";
+  const badge = status === "loading" ? "AI refreshing" : status === "ready" ? "AI summaries" : status === "cached" ? "Saved AI summaries" : status === "error" ? "AI unavailable" : "Local fallback";
+  const errorCopy = state.stakeholderSummaryError?.[eventKey] || "Check the Edge Function deploy, Gemini secret, and Supabase SQL setup.";
+  const statusCopy = status === "error" ? `<p class="notice compact-notice">AI summary could not load: ${esc(errorCopy)} Showing available saved/local information.</p>` : "";
+  return `<section class="card report-card stakeholder-individual-section" id="stakeholder-individual"><div class="report-heading"><div><p class="eyebrow">Individual dashboard</p><h2>Newbie feedback summaries</h2><p class="subtle">Built like a full table view: scan each newbie, then open details only when needed.</p></div><span class="ai-badge">${esc(badge)}</span></div>${statusCopy}<div class="stakeholder-table-wrap"><table class="stakeholder-individual-table"><thead><tr><th>Newbie</th><th>Summary</th><th>Group</th><th>${isMada ? "Group points" : "Question points"}</th><th>Mini-project</th><th>Further info</th></tr></thead><tbody>${people.map(({ group, person }) => stakeholderIndividualRow(person, group, isMada, eventKey)).join("")}</tbody></table></div></section>`;
 }
 
 function stakeholderPayload(eventKey) {
@@ -3177,18 +3395,75 @@ async function generateStakeholderOpinion(eventKey) {
   if (!stakeholderEvents[eventKey]) throw new Error("Choose a stakeholder dashboard.");
   const dashboard = stakeholderPayload(eventKey);
   let summary = "";
+  let personSummaries = {};
 
   if (remoteEnabled() && supabaseClient.functions?.invoke) {
+    const accessCode = state.stakeholderAccessCode?.[eventKey] || state.stakeholderAccessCodes?.[eventKey]?.code || "";
     const { data, error } = await supabaseClient.functions.invoke("stakeholder-summary", {
-      body: { eventKey, accessCode: state.stakeholderAccessCode?.[eventKey] || "", dashboard }
+      body: { eventKey, accessCode, dashboard }
     });
     if (error) throw error;
     summary = data?.summary || "";
+    personSummaries = data?.personSummaries || {};
+    if (data?.cached) state.stakeholderSummaryStatus[eventKey] = "cached";
   }
 
   state.stakeholderSummaries[eventKey] = summary || stakeholderFallbackSummary(eventKey);
+  Object.entries(personSummaries).forEach(([person, content]) => {
+    const value = String(content || "").trim();
+    if (value) state.stakeholderPersonSummaries[stakeholderPersonSummaryKey(eventKey, person)] = value;
+  });
+  if (state.stakeholderSummaryStatus[eventKey] !== "cached") {
+    state.stakeholderSummaryStatus[eventKey] = Object.keys(personSummaries).length ? "ready" : "local";
+  }
   saveLocal();
   return state.stakeholderSummaries[eventKey];
+}
+
+function stakeholderPeople(eventKey) {
+  return eventKey === "madagascar"
+    ? madaGroups().flatMap(group => group.participants || [])
+    : state.data.groups.flatMap(group => group.participants || []);
+}
+
+function hasStakeholderAISummaries(eventKey) {
+  const people = stakeholderPeople(eventKey);
+  return people.length > 0 && people.every(person => state.stakeholderPersonSummaries?.[stakeholderPersonSummaryKey(eventKey, person)]);
+}
+
+function clearStakeholderAISummaries(eventKey) {
+  Object.keys(state.stakeholderPersonSummaries || {}).forEach(key => {
+    if (key.startsWith(`${eventKey}|`)) delete state.stakeholderPersonSummaries[key];
+  });
+  delete state.stakeholderSummaries[eventKey];
+  state.stakeholderSummaryStatus[eventKey] = "local";
+  state.stakeholderSummaryError[eventKey] = "";
+  stakeholderAISessionAttempts[eventKey] = false;
+}
+
+function queueStakeholderAISummary(eventKey) {
+  if (!remoteEnabled() || !supabaseClient.functions?.invoke) return;
+  if (!stakeholderAccessIsCurrent(eventKey)) return;
+  if (stakeholderAIInFlight[eventKey] || stakeholderAISessionAttempts[eventKey]) return;
+
+  stakeholderAIInFlight[eventKey] = true;
+  stakeholderAISessionAttempts[eventKey] = true;
+  state.stakeholderSummaryStatus[eventKey] = "loading";
+  saveLocal();
+
+  setTimeout(async () => {
+    try {
+      await generateStakeholderOpinion(eventKey);
+      if (location.hash === "#stakeholder" && state.session?.eventKey === eventKey) stakeholderDashboard(eventKey);
+    } catch (error) {
+      console.error("Default stakeholder AI summary failed", error);
+      state.stakeholderSummaryStatus[eventKey] = hasStakeholderAISummaries(eventKey) ? "cached" : "error";
+      state.stakeholderSummaryError[eventKey] = friendlyError(error, error?.message || "AI request failed.");
+      saveLocal();
+    } finally {
+      stakeholderAIInFlight[eventKey] = false;
+    }
+  }, 50);
 }
 
 function stakeholderAccessAdminView(eventKey) {
@@ -3207,6 +3482,49 @@ function stakeholderAccessAdminView(eventKey) {
   });
 }
 
+function adminIndividualFeedbackView(eventKey) {
+  const groups = eventKey === "madagascar" ? madaGroups() : state.data.groups;
+  const savedCount = groups.reduce((sum, group) => sum + (group.participants || []).filter(person => participantAdminNotes(eventKey, person).length).length, 0);
+  const content = `<form id="admin-individual-feedback-form" data-event-key="${esc(eventKey)}" class="admin-individual-feedback-form">${groups.map(group => `<section class="admin-feedback-group"><div><strong>${esc(group.name)}</strong>${group.office ? `<small class="mada-office-badge">${esc(group.office)}</small>` : ""}</div><div class="admin-feedback-grid">${(group.participants || []).map(person => {
+    const note = state.adminIndividualFeedback?.[adminFeedbackKey(eventKey, person)]?.feedback || "";
+    return `<label>${participantNameBlock(person, "small", false)}<textarea name="adminFeedback::${esc(person)}" rows="3" placeholder="Admin feedback for stakeholder summary...">${esc(note)}</textarea></label>`;
+  }).join("")}</div></section>`).join("")}<button class="primary" type="submit">Save individual feedback</button><p class="subtle">Empty a field and save to remove that admin note. These notes appear in stakeholder summaries and details.</p></form>`;
+  return adminAccordion({
+    eyebrow: "Stakeholder notes",
+    title: "Add individual notes",
+    subtitle: "Admin notes for each newbie, included in stakeholder summaries.",
+    badge: `${savedCount} noted`,
+    extraClass: "mentor-code-admin-card",
+    content
+  });
+}
+
+function aiUsageSummaryView(eventKey = "") {
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const events = (state.aiUsageEvents || []).filter(item => {
+    if (eventKey && item.eventKey !== eventKey) return false;
+    return String(item.createdAt || "").startsWith(monthKey);
+  });
+  const calls = events.length;
+  const tokens = events.reduce((sum, item) => sum + (Number(item.totalTokens) || 0), 0);
+  const callLimit = Number(cfg.aiMonthlyCallLimit || 0);
+  const tokenLimit = Number(cfg.aiMonthlyTokenLimit || 0);
+  const callsLeft = callLimit ? Math.max(0, callLimit - calls) : null;
+  const tokensLeft = tokenLimit ? Math.max(0, tokenLimit - tokens) : null;
+  const latest = events[0];
+  const generateButton = eventKey ? `<div class="subtle-actions admin-accordion-actions"><button class="primary" type="button" data-action="admin-stakeholder-summary" data-event-key="${esc(eventKey)}">Generate stakeholder AI summary</button></div>` : "";
+  const content = `${generateButton}<div class="stakeholder-metric-strip ai-usage-strip"><div><strong>${calls}</strong><span>AI calls this month</span></div><div><strong>${callsLeft === null ? "Set cap" : callsLeft}</strong><span>Calls left</span></div><div><strong>${tokens.toLocaleString()}</strong><span>Tokens used</span></div><div><strong>${tokensLeft === null ? "Set cap" : tokensLeft.toLocaleString()}</strong><span>Tokens left</span></div></div><p class="subtle">${latest ? `Latest AI call: ${new Date(latest.createdAt).toLocaleString()}${latest.model ? ` · ${esc(latest.model)}` : ""}` : "No AI summaries generated yet this month."} Limits come from <code>config.js</code>. Usage updates only after this app calls the stakeholder AI summary function.</p>`;
+  return adminAccordion({
+    eyebrow: "AI usage",
+    title: eventKey ? `${stakeholderEventLabel(eventKey)} AI usage` : "AI usage",
+    subtitle: "Monthly calls and token estimate from stakeholder summary generation.",
+    badge: `${calls} call${calls === 1 ? "" : "s"}`,
+    extraClass: "mentor-code-admin-card",
+    content
+  });
+}
+
 function stakeholderAccessView(eventKey = "mauritius", message = "") {
   const label = stakeholderEventLabel(eventKey);
   shell(`<main class="page simple-page"><section class="welcome-panel stakeholder-gate"><div><p class="eyebrow orange-eyebrow">Stakeholder access</p><h1>${esc(label)} dashboard</h1><p class="subtle">Enter the private code from admin to open the read-only stakeholder dashboard.</p>${message ? `<div class="mentor-code-error">${esc(message)}</div>` : ""}<form id="stakeholder-code-form" data-event-key="${esc(eventKey)}" class="stakeholder-code-form"><label>Access code<input name="stakeholderCode" type="text" autocomplete="one-time-code" placeholder="SP-SHARE-XXXX-XXXX-XXXX" required></label><button class="primary" type="submit">Open dashboard</button></form></div></section></main>`);
@@ -3215,16 +3533,18 @@ function stakeholderAccessView(eventKey = "mauritius", message = "") {
 function stakeholderDashboard(eventKey) {
   const isMada = eventKey === "madagascar";
   const rows = isMada ? madaScoreboard() : combinedScoreboard();
-  const summary = state.stakeholderSummaries?.[eventKey] || stakeholderFallbackSummary(eventKey);
+  const individualSection = stakeholderIndividualDashboard(eventKey);
+  const winnerView = stakeholderWinnerView(eventKey, rows);
   const cards = isMada
-    ? madaGroups().map(group => `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office || "")}</p><h2>Group dashboard</h2></div><span class="ai-badge">${madaGroupAverage(group)}/${madaProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${madaGroupAverage(group)}/${madaProjectTotal}`, label: "Mini-project average" }, { value: String(madaReviewsForGroup(group).length), label: "Jury reviews" }, { value: String(group.participants.length), label: "Newbies" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildMadaGroupSummary(group))}</p>${stakeholderMadaScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${madaProjectBreakdownView(group)}</details><h3>Newbie dashboard</h3><div class="stakeholder-newbie-grid">${group.participants.map(person => stakeholderMadaNewbieCard(person, group)).join("")}</div></article>`).join("")
+    ? madaGroups().map(group => `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office || "")}</p><h2>Group and work context</h2></div><span class="ai-badge">${madaGroupAverage(group)}/${madaProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${madaGroupAverage(group)}/${madaProjectTotal}`, label: "Mini-project average" }, { value: String(madaReviewsForGroup(group).length), label: "Jury reviews" }, { value: String(group.participants.length), label: "Newbies" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildMadaGroupSummary(group))}</p>${stakeholderMadaScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${madaProjectBreakdownView(group)}</details></article>`).join("")
     : state.data.groups.map(group => {
       const completed = completedQuestionFeedback(group);
       const total = groupScore(group) + miniProjectAverage(group);
-      return `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group dashboard</h2></div><span class="ai-badge">${total}/${knownTotalMarks() + miniProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${total}/${knownTotalMarks() + miniProjectTotal}`, label: "Overall points" }, { value: `${groupScore(group)}/${knownTotalMarks()}`, label: "Question points" }, { value: `${miniProjectAverage(group)}/${miniProjectTotal}`, label: "Mini-project average" }, { value: `${completed.length}/${state.data.questions.length}`, label: "Completed questions" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildGroupSummary(group))}</p><h3>Completed questions</h3>${stakeholderQuestionPanel(group)}<h3>Mini project</h3>${stakeholderMiniScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${miniProjectBreakdownView(group)}</details><h3>Newbie dashboard</h3><div class="stakeholder-newbie-grid">${group.participants.map(person => stakeholderNewbieCard(person, group)).join("")}</div></article>`;
+      return `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group and work context</h2></div><span class="ai-badge">${total}/${knownTotalMarks() + miniProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${total}/${knownTotalMarks() + miniProjectTotal}`, label: "Overall points" }, { value: `${groupScore(group)}/${knownTotalMarks()}`, label: "Question points" }, { value: `${miniProjectAverage(group)}/${miniProjectTotal}`, label: "Mini-project average" }, { value: `${completed.length}/${state.data.questions.length}`, label: "Completed questions" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildGroupSummary(group))}</p><h3>Completed questions</h3>${stakeholderQuestionPanel(group)}<h3>Mini project</h3>${stakeholderMiniScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${miniProjectBreakdownView(group)}</details></article>`;
     }).join("");
 
-  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions"><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button><button class="primary" data-action="stakeholder-summary" data-event-key="${esc(eventKey)}">OpenAI opinion</button></div></section><section class="stats">${rows.slice(0, 4).map((row, index) => `<div class="stat"><strong>${index + 1}</strong><span>${esc(row.group.name)} · ${esc(row.total !== undefined ? `${row.total}/${row.max}` : `${row.average}/${row.max}`)}</span></div>`).join("")}</section><section class="card report-card stakeholder-opinion"><div class="report-heading"><div><p class="eyebrow">Stakeholder opinion</p><h2>OpenAI-ready summary</h2></div><span class="ai-badge">${remoteEnabled() ? "Secure function" : "Local fallback"}</span></div><p class="summary-text">${esc(summary)}</p></section><section class="report-stack">${cards}</section></main>`);
+  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions"><button class="secondary" data-scroll-target="stakeholder-individual">Individual table</button><button class="secondary" data-scroll-target="stakeholder-groups">Group details</button><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button></div></section><section class="report-stack">${winnerView}${individualSection}<div id="stakeholder-groups" class="stakeholder-anchor"></div>${cards}</section></main>`);
+  queueStakeholderAISummary(eventKey);
 }
 
 async function openStakeholderDashboard() {
@@ -3351,11 +3671,14 @@ function buildMadaGroupSummary(group) {
 }
 
 function buildMadaPersonFeedback(person) {
+  const adminNotes = participantAdminNotes("madagascar", person);
   const notes = Object.values(state.madaReviews)
     .filter(review => review.individualNotes?.[person]?.trim())
     .map(review => ({ jury: review.juryName || "Jury", text: review.individualNotes[person] }));
-  if (!notes.length) return "No individual feedback has been submitted yet.";
-  return `${notes.length} note(s): ${notes.slice(0, 3).map(item => `${madaFirstName(item.jury)}: ${item.text}`).join(" · ")}`;
+  if (!adminNotes.length && !notes.length) return "No individual feedback has been submitted yet.";
+  const adminCopy = adminNotes.length ? `Admin feedback: ${adminNotes.map(item => item.note).join(" · ")}` : "";
+  const juryCopy = notes.length ? `${notes.length} jury note(s): ${notes.slice(0, 3).map(item => `${madaFirstName(item.jury)}: ${item.text}`).join(" · ")}` : "No jury individual notes.";
+  return [adminCopy, juryCopy].filter(Boolean).join(" ");
 }
 
 function madaDetailedGroupCardsView() {
@@ -3399,20 +3722,22 @@ function madaAdminPage() {
   const scoreRows = madaScoreboard();
   const leader = scoreRows[0];
   const generatedCount = Object.keys(state.reports).filter(key => key.startsWith("mada-group|") || key.startsWith("mada-person|")).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${stakeholderAccessAdminView("madagascar")}${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${adminIndividualFeedbackView("madagascar")}${stakeholderAccessAdminView("madagascar")}${aiUsageSummaryView("madagascar")}${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
 }
 
 function buildPersonFeedback(person) {
+  const adminNotes = participantAdminNotes("mauritius", person);
   const remarks = Object.entries(state.individualRemarks)
     .filter(([key, value]) => key.split("|")[1] === person && (typeof value === "string" ? value.trim() : value.remark?.trim()))
     .map(([, value]) => typeof value === "string" ? { mentor: "Mentor", text: value } : { mentor: value.mentorName || "Mentor", text: value.remark });
   const miniNotes = Object.values(state.miniProjectReviews)
     .filter(review => review.individualNotes?.[person]?.trim())
     .map(review => ({ jury: review.juryName || "Jury", text: review.individualNotes[person] }));
-  if (!remarks.length && !miniNotes.length) return "No individual feedback has been submitted yet.";
+  if (!adminNotes.length && !remarks.length && !miniNotes.length) return "No individual feedback has been submitted yet.";
+  const adminCopy = adminNotes.length ? `Admin feedback: ${adminNotes.map(item => item.note).join(" · ")}` : "";
   const questionCopy = remarks.length ? `${remarks.length} question remark(s): ${remarks.slice(0, 3).map(x => `${x.mentor}: ${x.text}`).join(" · ")}` : "No question remarks.";
   const miniCopy = miniNotes.length ? `${miniNotes.length} mini-project note(s): ${miniNotes.slice(0, 3).map(x => `${x.jury}: ${x.text}`).join(" · ")}` : "No mini-project individual notes.";
-  return `${questionCopy} ${miniCopy}`;
+  return [adminCopy, questionCopy, miniCopy].filter(Boolean).join(" ");
 }
 
 function buildMiniProjectSummary(group) {
@@ -3432,6 +3757,7 @@ function historyList() {
   const areaLabel = tableName => ({
     group_corrections: "question marks",
     individual_remarks: "individual feedback",
+    admin_individual_feedback: "admin individual feedback",
     mini_project_reviews: "mini-project review",
     mini_project_assignments: "mini-project title",
     newbie_photos: "participant photo",
@@ -3561,7 +3887,7 @@ function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${stakeholderAccessAdminView("mauritius")}${adminDetailedGroupCardsView()}${mentorManagementView()}${newbieGroupsEditorView("mauritius")}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminIndividualFeedbackView("mauritius")}${stakeholderAccessAdminView("mauritius")}${aiUsageSummaryView("mauritius")}${adminDetailedGroupCardsView()}${mentorManagementView()}${newbieGroupsEditorView("mauritius")}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
 }
 
 async function openPublicForm() {
@@ -3752,6 +4078,20 @@ document.addEventListener("submit", async event => {
       madaAdminPage();
     } catch (error) {
       showToast(friendlyError(error, "Could not save Madagascar groups. Try again."));
+    }
+  }
+
+  if (event.target.id === "admin-individual-feedback-form") {
+    const data = Object.fromEntries(new FormData(event.target));
+    const eventKey = event.target.dataset.eventKey || "mauritius";
+    try {
+      await persistAdminIndividualFeedbackAsAdmin(eventKey, data);
+      showToast(updatedOnlineMessage("Individual feedback"));
+      if (eventKey === "madagascar") madaAdminPage();
+      else adminDashboard(lastAdminMentor);
+    } catch (error) {
+      console.error("Admin individual feedback save failed", error);
+      showToast(friendlyError(error, "Could not save individual feedback. Try again."));
     }
   }
 
@@ -3953,6 +4293,11 @@ document.addEventListener("click", async event => {
     return;
   }
 
+  if (button.dataset.scrollTarget) {
+    document.getElementById(button.dataset.scrollTarget)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
   if (button.dataset.photoUrl) {
     openPhotoViewer(button.dataset.photoUrl, button.dataset.photoName || "Participant");
     return;
@@ -4107,6 +4452,7 @@ document.addEventListener("click", async event => {
   if (button.dataset.action === "return-current") dashboard();
   if (button.dataset.action === "public-form") openPublicForm();
   if (button.dataset.action === "refresh-stakeholder") {
+    clearStakeholderAISummaries(button.dataset.eventKey || "mauritius");
     await loadSharedData({ includeAdminData: false });
     stakeholderDashboard(button.dataset.eventKey || "mauritius");
     showToast("✓ Stakeholder data refreshed");
@@ -4115,13 +4461,29 @@ document.addEventListener("click", async event => {
   if (button.dataset.action === "stakeholder-summary") {
     const eventKey = button.dataset.eventKey || "mauritius";
     try {
-      showToast(remoteEnabled() ? "Generating OpenAI opinion..." : "Generating local stakeholder summary...");
+      showToast(remoteEnabled() ? "Generating AI summary..." : "Generating local stakeholder summary...");
       await generateStakeholderOpinion(eventKey);
       stakeholderDashboard(eventKey);
       showToast("✓ Stakeholder opinion ready");
     } catch (error) {
       console.error("Stakeholder summary failed", error);
       showToast(friendlyError(error, "Could not generate the stakeholder opinion."));
+    }
+    return;
+  }
+  if (button.dataset.action === "admin-stakeholder-summary") {
+    const eventKey = button.dataset.eventKey || "mauritius";
+    try {
+      clearStakeholderAISummaries(eventKey);
+      showToast("Generating stakeholder AI summary...");
+      await generateStakeholderOpinion(eventKey);
+      await loadSharedData({ includeAdminData: true });
+      showToast("✓ AI usage updated");
+      if (eventKey === "madagascar") madaAdminPage();
+      else adminDashboard(lastAdminMentor);
+    } catch (error) {
+      console.error("Admin stakeholder summary failed", error);
+      showToast(friendlyError(error, "Could not generate stakeholder AI summary. Check the Edge Function and secrets."));
     }
     return;
   }

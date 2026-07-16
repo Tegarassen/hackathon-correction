@@ -44,6 +44,19 @@ create table if not exists public.individual_remarks (
   unique (group_id, participant_name, question_position)
 );
 
+create table if not exists public.admin_individual_feedback (
+  id uuid primary key default gen_random_uuid(),
+  event_key text not null check (event_key in ('mauritius', 'madagascar')),
+  group_id integer not null,
+  group_name text not null,
+  participant_name text not null,
+  feedback text not null default '',
+  admin_name text not null default 'Admin',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (event_key, participant_name)
+);
+
 create table if not exists public.ai_reports (
   id uuid primary key default gen_random_uuid(),
   report_key text not null unique,
@@ -53,6 +66,25 @@ create table if not exists public.ai_reports (
   participant_name text,
   content text not null,
   generated_at timestamptz not null default now()
+);
+
+create table if not exists public.ai_usage_events (
+  id bigint generated always as identity primary key,
+  event_key text check (event_key in ('mauritius', 'madagascar')),
+  provider text not null default 'ai',
+  model text,
+  prompt_tokens integer not null default 0,
+  output_tokens integer not null default 0,
+  total_tokens integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.stakeholder_ai_summaries (
+  event_key text primary key check (event_key in ('mauritius', 'madagascar')),
+  overall_summary text not null default '',
+  person_summaries jsonb not null default '{}'::jsonb,
+  generated_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.change_history (
@@ -437,6 +469,16 @@ create trigger individual_remarks_updated_at
 before update on public.individual_remarks
 for each row execute function public.set_updated_at();
 
+drop trigger if exists admin_individual_feedback_updated_at on public.admin_individual_feedback;
+create trigger admin_individual_feedback_updated_at
+before update on public.admin_individual_feedback
+for each row execute function public.set_updated_at();
+
+drop trigger if exists stakeholder_ai_summaries_updated_at on public.stakeholder_ai_summaries;
+create trigger stakeholder_ai_summaries_updated_at
+before update on public.stakeholder_ai_summaries
+for each row execute function public.set_updated_at();
+
 drop trigger if exists newbie_photos_updated_at on public.newbie_photos;
 create trigger newbie_photos_updated_at
 before update on public.newbie_photos
@@ -532,9 +574,51 @@ create trigger individual_remarks_history
 after insert or update or delete on public.individual_remarks
 for each row execute function public.log_individual_remark_change();
 
+create or replace function public.log_admin_individual_feedback_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.change_history (
+    table_name,
+    record_id,
+    group_id,
+    group_name,
+    participant_name,
+    mentor_name,
+    action,
+    old_data,
+    new_data
+  )
+  values (
+    'admin_individual_feedback',
+    coalesce(new.id, old.id),
+    coalesce(new.group_id, old.group_id),
+    coalesce(new.group_name, old.group_name),
+    coalesce(new.participant_name, old.participant_name),
+    coalesce(new.admin_name, old.admin_name),
+    tg_op,
+    case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) else null end,
+    case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) else null end
+  );
+
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists admin_individual_feedback_history on public.admin_individual_feedback;
+create trigger admin_individual_feedback_history
+after insert or update or delete on public.admin_individual_feedback
+for each row execute function public.log_admin_individual_feedback_change();
+
 alter table public.group_corrections enable row level security;
 alter table public.individual_remarks enable row level security;
+alter table public.admin_individual_feedback enable row level security;
 alter table public.ai_reports enable row level security;
+alter table public.ai_usage_events enable row level security;
+alter table public.stakeholder_ai_summaries enable row level security;
 alter table public.change_history enable row level security;
 alter table public.admin_users enable row level security;
 alter table public.mentors enable row level security;
@@ -584,7 +668,13 @@ grant select on public.mini_project_assignments to anon, authenticated;
 grant insert, update, delete on public.mini_project_assignments to authenticated;
 grant select, insert, update, delete on public.group_corrections to anon, authenticated;
 grant select, insert, update, delete on public.individual_remarks to anon, authenticated;
+grant select on public.admin_individual_feedback to anon, authenticated;
+grant insert, update, delete on public.admin_individual_feedback to authenticated;
 grant select, insert, update, delete on public.ai_reports to authenticated;
+grant select on public.ai_usage_events to authenticated;
+grant insert on public.ai_usage_events to anon, authenticated;
+grant usage, select on sequence public.ai_usage_events_id_seq to anon, authenticated;
+grant select, insert, update on public.stakeholder_ai_summaries to anon, authenticated;
 grant select, delete on public.change_history to authenticated;
 grant select on public.admin_users to authenticated;
 
@@ -840,6 +930,19 @@ on public.individual_remarks for delete
 to anon, authenticated
 using (true);
 
+drop policy if exists "public read admin individual feedback" on public.admin_individual_feedback;
+create policy "public read admin individual feedback"
+on public.admin_individual_feedback for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "admin manage admin individual feedback" on public.admin_individual_feedback;
+create policy "admin manage admin individual feedback"
+on public.admin_individual_feedback for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
 drop policy if exists "public read ai reports" on public.ai_reports;
 drop policy if exists "admin read ai reports" on public.ai_reports;
 create policy "admin read ai reports"
@@ -854,6 +957,37 @@ on public.ai_reports for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "admin read ai usage events" on public.ai_usage_events;
+create policy "admin read ai usage events"
+on public.ai_usage_events for select
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "function insert ai usage events" on public.ai_usage_events;
+create policy "function insert ai usage events"
+on public.ai_usage_events for insert
+to anon, authenticated
+with check (true);
+
+drop policy if exists "public read stakeholder ai summaries" on public.stakeholder_ai_summaries;
+create policy "public read stakeholder ai summaries"
+on public.stakeholder_ai_summaries for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "function upsert stakeholder ai summaries" on public.stakeholder_ai_summaries;
+create policy "function upsert stakeholder ai summaries"
+on public.stakeholder_ai_summaries for insert
+to anon, authenticated
+with check (true);
+
+drop policy if exists "function update stakeholder ai summaries" on public.stakeholder_ai_summaries;
+create policy "function update stakeholder ai summaries"
+on public.stakeholder_ai_summaries for update
+to anon, authenticated
+using (true)
+with check (true);
 
 drop policy if exists "public read change history" on public.change_history;
 drop policy if exists "admin read change history" on public.change_history;
@@ -884,7 +1018,25 @@ end $$;
 
 do $$
 begin
+  alter publication supabase_realtime add table public.admin_individual_feedback;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
   alter publication supabase_realtime add table public.ai_reports;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.ai_usage_events;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.stakeholder_ai_summaries;
 exception when duplicate_object then null;
 end $$;
 
