@@ -561,6 +561,37 @@ img.participant-photo { background:#dceaf2; }
 .mentor-code-error { margin:0 0 14px; padding:10px 12px; border:1px solid #ffc18e; border-left:4px solid var(--orange); border-radius:12px; background:#fff8f2; color:#9a4312; font-size:13px; font-weight:800; }
 .mentor-code-buttons { display:flex; justify-content:flex-end; gap:9px; margin-top:18px; }
 .notice { border-left: 4px solid var(--green); padding: 12px 16px; background: #e8f8f6; border-radius: 8px; margin-bottom: 18px; }
+.stakeholder-page .hero { color:#eef5fb; }
+.stakeholder-page .hero .eyebrow { background:rgba(226,247,244,.12); color:#96f2eb; }
+.stakeholder-page .hero .eyebrow:before { background:#ff9c54; }
+.stakeholder-opinion { border-color:#b9e7e1; background:linear-gradient(135deg,#f8fcfd,#fff7ef); }
+.stakeholder-group-card { background:linear-gradient(135deg,#edf3f6,#f8fbfc); }
+.stakeholder-question-list { max-height:none; }
+.stakeholder-question-list > p { margin:0; }
+.stakeholder-metric-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:16px 0 8px; }
+.stakeholder-metric-strip > div { display:grid; gap:3px; padding:13px; border:1px solid #dce7ec; border-radius:14px; background:rgba(255,255,255,.82); }
+.stakeholder-metric-strip strong { color:var(--ink); font-family:"Montserrat",sans-serif; font-size:22px; }
+.stakeholder-metric-strip span { color:var(--muted); font-size:12px; font-weight:700; }
+.stakeholder-score-pills { display:flex; flex-wrap:wrap; gap:7px; margin:10px 0 4px; }
+.stakeholder-score-pills span { display:inline-flex; padding:7px 10px; border-radius:999px; background:#e8f8f6; color:#087c79; font-size:12px; font-weight:800; }
+.stakeholder-detail-block { margin-top:12px; padding-top:0; border:1px solid #dce7ec; border-radius:14px; background:#f8fbfc; overflow:hidden; }
+.stakeholder-detail-block summary { padding:12px 14px; color:#087c79; }
+.stakeholder-detail-block .mini-jury-breakdown { margin:0 12px 12px; }
+.stakeholder-newbie-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.stakeholder-newbie-card { margin:0; padding:0; border:1px solid #dce7ec; border-radius:14px; background:rgba(255,255,255,.86); overflow:hidden; }
+.stakeholder-newbie-card summary { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px; color:var(--ink); list-style:none; }
+.stakeholder-newbie-card summary::-webkit-details-marker { display:none; }
+.stakeholder-newbie-card summary > span:last-child { flex:0 0 auto; padding:5px 9px; border-radius:999px; background:#fff1e8; color:#b85720; font-size:11px; font-weight:900; }
+.stakeholder-newbie-body { display:grid; gap:10px; padding:0 12px 12px; border-top:1px solid #e1eaee; }
+.stakeholder-newbie-body p { margin:12px 0 0; color:#506078; line-height:1.6; }
+.stakeholder-newbie-points { display:flex; flex-wrap:wrap; gap:8px; }
+.stakeholder-newbie-points span { padding:7px 9px; border-radius:10px; background:#f2f7f8; color:#607187; font-size:12px; }
+.stakeholder-newbie-points b { color:var(--ink); }
+.stakeholder-newbie-body h4 { margin:4px 0 0; color:var(--ink); }
+.stakeholder-newbie-body ul { margin:0; padding-left:18px; color:#607187; font-size:13px; line-height:1.55; }
+.stakeholder-code-form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:end; max-width:680px; margin-top:18px; }
+.stakeholder-code-form label { margin:0; }
+.stakeholder-gate { grid-template-columns:1fr; }
 .toast { position:fixed; right:22px; bottom:22px; z-index:100; padding:12px 17px; border-radius:11px; background:var(--ink); color:white; box-shadow:0 14px 35px rgba(21,33,55,.25); animation:toast-in .2s ease-out; }
 @keyframes toast-in { from { transform:translateY(8px); opacity:0; } }
 @media (max-width: 1100px) {
@@ -582,6 +613,8 @@ img.participant-photo { background:#dceaf2; }
   .hero { align-items: start; flex-direction: column; }
   .hero-actions { width:100%; justify-content:flex-start; }
   .individual-grid, .mentor-inputs, .mentor-admin-list, .photo-admin-grid, .photo-upload-form, .rename-admin-form, .admin-mini-score-grid, .admin-mini-notes-grid { grid-template-columns:1fr; }
+  .stakeholder-metric-strip, .stakeholder-newbie-grid { grid-template-columns:1fr; }
+  .stakeholder-code-form { grid-template-columns:1fr; }
   .mentor-code-row { grid-template-columns:34px minmax(0,1fr); align-items:start; }
   .mentor-code-actions { grid-column:1/-1; justify-content:flex-start; }
   .newbie-group-edit-head { grid-template-columns:40px minmax(0,1fr); }

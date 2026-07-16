@@ -129,6 +129,11 @@ state = {
   juryAccessCodes: state.juryAccessCodes || {},
   juryAccessPublic: state.juryAccessPublic === true,
   juryCodeSetupMissing: false,
+  stakeholderAccessUnlocked: state.stakeholderAccessUnlocked || {},
+  stakeholderAccessCode: state.stakeholderAccessCode || {},
+  stakeholderAccessCodes: state.stakeholderAccessCodes || {},
+  stakeholderCodeSetupMissing: false,
+  stakeholderSummaries: state.stakeholderSummaries || {},
   mentors: state.mentors || defaultMentors,
   juries: state.juries || defaultJuries,
   groupCorrections: state.groupCorrections || {},
@@ -181,6 +186,13 @@ const generateJuryCode = () => `SP-JURY-${randomCodeChunk()}-${randomCodeChunk()
 const jurySlug = name => mentorSlug(name);
 const juryAccessUrl = (name, code) => `${siteUrl()}?jury=${encodeURIComponent(jurySlug(name))}&juryAccess=${encodeURIComponent(normalizeAccessCode(code))}#mini-project`;
 const juryNameFromSlug = slug => state.juries.find(name => jurySlug(name) === String(slug || "").toLowerCase()) || "";
+const stakeholderEvents = {
+  mauritius: "Spoon Mauritius",
+  madagascar: "Spoon Madagascar"
+};
+const stakeholderEventLabel = eventKey => stakeholderEvents[eventKey] || "Stakeholder";
+const generateStakeholderCode = () => `SP-SHARE-${randomCodeChunk()}-${randomCodeChunk()}-${randomCodeChunk()}`;
+const stakeholderAccessUrl = (eventKey, code) => `${siteUrl()}?stakeholder=${encodeURIComponent(eventKey)}&stakeholderAccess=${encodeURIComponent(normalizeAccessCode(code))}#stakeholder`;
 const mentorAccessDetails = name => {
   const code = state.mentorAccessCodes?.[name]?.code || "";
   const privateUrl = mentorAccessUrl(name, code);
@@ -197,6 +209,15 @@ const juryAccessDetails = name => {
     code,
     privateUrl,
     shareText: `Spoon Hackathon jury page for ${name}: ${privateUrl}\nBackup code: ${code}`
+  };
+};
+const stakeholderAccessDetails = eventKey => {
+  const code = state.stakeholderAccessCodes?.[eventKey]?.code || "";
+  const privateUrl = stakeholderAccessUrl(eventKey, code);
+  return {
+    code,
+    privateUrl,
+    shareText: `${stakeholderEventLabel(eventKey)} stakeholder dashboard: ${privateUrl}\nBackup code: ${code}`
   };
 };
 const groupById = id => state.data.groups.find(group => group.id === Number(id));
@@ -321,6 +342,27 @@ function juryAccessIsCurrent() {
   return state.juryAccessUnlocked && record?.active !== false && normalizeAccessCode(record?.code) === normalizeAccessCode(state.juryAccessCode);
 }
 ensureJuryAccessCodes();
+function ensureStakeholderAccessCodes() {
+  state.stakeholderAccessCodes = state.stakeholderAccessCodes || {};
+  Object.keys(stakeholderEvents).forEach(eventKey => {
+    const existing = state.stakeholderAccessCodes[eventKey];
+    if (!existing?.code) {
+      state.stakeholderAccessCodes[eventKey] = {
+        code: generateStakeholderCode(),
+        active: true,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  });
+}
+function stakeholderAccessIsCurrent(eventKey) {
+  const record = state.stakeholderAccessCodes?.[eventKey];
+  if (remoteEnabled() && state.session?.role !== "admin") {
+    return state.stakeholderAccessUnlocked?.[eventKey] && Boolean(state.stakeholderAccessCode?.[eventKey]);
+  }
+  return state.stakeholderAccessUnlocked?.[eventKey] && record?.active !== false && normalizeAccessCode(record?.code) === normalizeAccessCode(state.stakeholderAccessCode?.[eventKey]);
+}
+ensureStakeholderAccessCodes();
 const madaCriterionScore = miniCriterionScore;
 const madaReviewsForGroup = group => Object.values(state.madaReviews).filter(review => Number(review.groupId) === Number(group.id));
 const madaProjectScore = review => miniProjectScore(review);
@@ -1171,6 +1213,19 @@ function applyJuryAccessSettingRows(rows = []) {
   if (row) state.juryAccessPublic = row.public_access === true;
 }
 
+function applyStakeholderAccessRows(rows = []) {
+  rows
+    .filter(row => row.event_key && row.access_code)
+    .forEach(row => {
+      state.stakeholderAccessCodes[row.event_key] = {
+        code: normalizeAccessCode(row.access_code),
+        active: row.active !== false,
+        updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+      };
+    });
+  ensureStakeholderAccessCodes();
+}
+
 function applyEventGroupRows(rows = []) {
   const activeRows = rows.filter(row => row.active !== false);
   const buildGroups = eventKey => activeRows
@@ -1379,6 +1434,84 @@ async function unlockJuryFromAccessCode(code, expectedJury = "") {
   state.session = { name: juryName, role: "jury" };
   save();
   return juryName;
+}
+
+function stakeholderForAccessCode(eventKey, code) {
+  const cleanCode = normalizeAccessCode(code);
+  const record = state.stakeholderAccessCodes?.[eventKey];
+  return record?.active !== false && normalizeAccessCode(record?.code) === cleanCode;
+}
+
+async function verifyStakeholderAccessCode(eventKey, code) {
+  const cleanCode = normalizeAccessCode(code);
+  if (!stakeholderEvents[eventKey] || !cleanCode) return false;
+  if (!remoteEnabled()) return stakeholderForAccessCode(eventKey, cleanCode);
+
+  const { data, error } = await supabaseClient.rpc("verify_stakeholder_access_code", {
+    requested_event_key: eventKey,
+    submitted_code: cleanCode
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+async function unlockStakeholderFromAccessCode(eventKey, code) {
+  const ok = await verifyStakeholderAccessCode(eventKey, code);
+  if (!ok) return false;
+
+  state.stakeholderAccessUnlocked = { ...state.stakeholderAccessUnlocked, [eventKey]: true };
+  state.stakeholderAccessCode = { ...state.stakeholderAccessCode, [eventKey]: normalizeAccessCode(code) };
+  state.session = { name: stakeholderEventLabel(eventKey), role: "stakeholder", eventKey };
+  save();
+  return true;
+}
+
+async function persistStakeholderAccessCode(eventKey) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage stakeholder links.");
+  const record = state.stakeholderAccessCodes?.[eventKey];
+  if (!record?.code || !remoteEnabled()) return;
+
+  const { error } = await supabaseClient
+    .from("stakeholder_access_codes")
+    .upsert({
+      event_key: eventKey,
+      access_code: normalizeAccessCode(record.code),
+      active: record.active !== false
+    }, { onConflict: "event_key" });
+  if (error) throw error;
+}
+
+async function regenerateStakeholderAccessCode(eventKey) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage stakeholder links.");
+  if (!stakeholderEvents[eventKey]) throw new Error("Choose a stakeholder dashboard.");
+
+  state.stakeholderAccessCodes[eventKey] = {
+    code: generateStakeholderCode(),
+    active: true,
+    updatedAt: new Date().toISOString()
+  };
+  state.stakeholderAccessUnlocked = { ...state.stakeholderAccessUnlocked, [eventKey]: false };
+  state.stakeholderAccessCode = { ...state.stakeholderAccessCode, [eventKey]: "" };
+  saveLocal();
+  await persistStakeholderAccessCode(eventKey);
+}
+
+async function setStakeholderAccessActive(eventKey, active) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage stakeholder links.");
+  if (!stakeholderEvents[eventKey]) throw new Error("Choose a stakeholder dashboard.");
+  ensureStakeholderAccessCodes();
+
+  state.stakeholderAccessCodes[eventKey] = {
+    ...state.stakeholderAccessCodes[eventKey],
+    active: Boolean(active),
+    updatedAt: new Date().toISOString()
+  };
+  if (!active) {
+    state.stakeholderAccessUnlocked = { ...state.stakeholderAccessUnlocked, [eventKey]: false };
+    state.stakeholderAccessCode = { ...state.stakeholderAccessCode, [eventKey]: "" };
+  }
+  saveLocal();
+  await persistStakeholderAccessCode(eventKey);
 }
 
 function mentorCodeModal(mentorName, message = "", options = {}) {
@@ -1781,12 +1914,13 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, eventGroupsResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
+    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, stakeholderCodesResult, eventGroupsResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       includeAdminData ? supabaseClient.from("mentor_access_codes").select("*").order("mentor_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("juries").select("*").order("name", { ascending: true }),
       includeAdminData ? supabaseClient.from("jury_access_codes").select("*").order("jury_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("jury_access_settings").select("*").limit(1),
+      includeAdminData ? supabaseClient.from("stakeholder_access_codes").select("*").order("event_key", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("event_groups").select("*").order("event_key", { ascending: true }).order("group_id", { ascending: true }),
       supabaseClient.from("mini_project_assignments").select("*").order("group_id", { ascending: true }),
       supabaseClient.from("group_corrections").select("*").order("updated_at", { ascending: false }),
@@ -1810,6 +1944,8 @@ async function loadSharedData(options = {}) {
     if (state.mentorCodeSetupMissing) console.warn("Could not load mentor_access_codes table. Run the latest setup script to share mentor codes across devices.", mentorCodesResult.error);
     state.juryCodeSetupMissing = Boolean(jurySettingsResult.error) || (includeAdminData && Boolean(juryCodesResult.error));
     if (state.juryCodeSetupMissing) console.warn("Could not load jury access tables. Run the latest setup script to share jury codes/settings across devices.", jurySettingsResult.error || juryCodesResult.error);
+    state.stakeholderCodeSetupMissing = includeAdminData && Boolean(stakeholderCodesResult.error);
+    if (state.stakeholderCodeSetupMissing) console.warn("Could not load stakeholder_access_codes table. Run the latest setup script before sharing stakeholder links.", stakeholderCodesResult.error);
     if (eventGroupsResult.error) console.warn("Could not load event_groups table. Group edits will stay local until the setup script is run.", eventGroupsResult.error);
     if (madaAssignments.error) console.warn("Could not load spoon_madagascar_assignments table. Run the Spoon Madagascar SQL setup when ready.", madaAssignments.error);
     if (madaReviews.error) console.warn("Could not load spoon_madagascar_reviews table. Run the Spoon Madagascar SQL setup when ready.", madaReviews.error);
@@ -1823,6 +1959,8 @@ async function loadSharedData(options = {}) {
     if (!jurySettingsResult.error) applyJuryAccessSettingRows(jurySettingsResult.data);
     if (includeAdminData && !juryCodesResult.error) applyJuryAccessCodeRows(juryCodesResult.data);
     else ensureJuryAccessCodes();
+    if (includeAdminData && !stakeholderCodesResult.error) applyStakeholderAccessRows(stakeholderCodesResult.data);
+    else ensureStakeholderAccessCodes();
     if (!madaJuriesResult.error) applyMadaJuryRows(madaJuriesResult.data);
     else console.warn("Could not load spoon_madagascar_juries table; using local jury list.", madaJuriesResult.error);
 
@@ -1871,6 +2009,12 @@ function scheduleRefresh() {
     }
     if (location.hash === "#mini-project" && state.session?.role === "jury" && !formOpen) {
       miniProjectDashboard();
+      return;
+    }
+    if (location.hash === "#stakeholder" && !formOpen) {
+      const params = new URLSearchParams(location.search);
+      const eventKey = stakeholderEvents[params.get("stakeholder")] ? params.get("stakeholder") : state.session?.eventKey || "mauritius";
+      stakeholderDashboard(eventKey);
       return;
     }
     if (!formOpen) openPublicForm();
@@ -2883,6 +3027,223 @@ function miniProjectBreakdownView(group, options = {}) {
   }).join("")}</div>`;
 }
 
+function madaProjectBreakdownView(group) {
+  const reviews = madaReviewsForGroup(group).sort((a, b) => String(a.juryName).localeCompare(String(b.juryName)));
+  if (!reviews.length) return `<p class="summary-text mini-breakdown-empty">Mini project has not been scored yet.</p>`;
+
+  return `<div class="mini-jury-breakdown"><div class="mini-jury-breakdown-head"><strong>Mini-project jury detail</strong><span>${madaGroupAverage(group)}/${madaProjectTotal} average · ${reviews.length} jury</span></div>${reviews.map(review => {
+    const individualNotes = Object.entries(review.individualNotes || {}).filter(([, note]) => String(note || "").trim());
+    return `<div class="mini-jury-row"><div class="mini-jury-top"><div><strong>${esc(madaFirstName(review.juryName || "Jury"))}</strong><small>${madaProjectScore(review)}/${madaProjectTotal} points</small></div></div><p>${esc(review.groupNote || "No group note from this jury.")}</p>${individualNotes.length ? `<ul>${individualNotes.map(([person, note]) => `<li><b>${esc(person)}:</b> ${esc(note)}</li>`).join("")}</ul>` : `<small>No individual notes from this jury.</small>`}</div>`;
+  }).join("")}</div>`;
+}
+
+function completedQuestionFeedback(group) {
+  return state.data.questions
+    .map(question => ({ question, correction: state.groupCorrections[correctionKey(group.id, question.id)] }))
+    .filter(item => item.correction?.status || item.correction?.workState === "completed");
+}
+
+function participantStakeholderFeedback(person, group) {
+  const questionNotes = participantQuestionNotes(person, group).map(item => `Q${item.qid} by ${item.mentor}: ${item.note}`);
+  const miniNotes = participantMiniNotes(person, group).map(item => `${item.jury}: ${item.note}`);
+  const notes = [...questionNotes, ...miniNotes];
+  return notes.length ? notes.join(" · ") : "No individual stakeholder feedback yet.";
+}
+
+function participantQuestionNotes(person, group) {
+  return Object.entries(state.individualRemarks)
+    .filter(([key, value]) => {
+      const [groupId, name, qid] = key.split("|");
+      const correction = state.groupCorrections[correctionKey(group.id, qid)];
+      const text = typeof value === "string" ? value : value?.remark;
+      return groupId === String(group.id) && name === person && correction?.status && String(text || "").trim();
+    })
+    .map(([key, value]) => {
+      const qid = key.split("|")[2];
+      return {
+        qid,
+        mentor: typeof value === "string" ? "Mentor" : value.mentorName || "Mentor",
+        note: typeof value === "string" ? value : value.remark
+      };
+    })
+    .sort((a, b) => Number(a.qid) - Number(b.qid));
+}
+
+function participantMiniNotes(person, group) {
+  return miniReviewsForGroup(group)
+    .filter(review => review.individualNotes?.[person]?.trim())
+    .map(review => ({
+      jury: review.juryName || "Jury",
+      score: `${miniProjectScore(review)}/${miniProjectTotal}`,
+      note: review.individualNotes[person]
+    }));
+}
+
+function participantMadaNotes(person) {
+  return Object.values(state.madaReviews)
+    .filter(review => review.individualNotes?.[person]?.trim())
+    .map(review => ({
+      jury: madaFirstName(review.juryName || "Jury"),
+      score: `${madaProjectScore(review)}/${madaProjectTotal}`,
+      note: review.individualNotes[person]
+    }));
+}
+
+function stakeholderMetricStrip(metrics) {
+  return `<div class="stakeholder-metric-strip">${metrics.map(metric => `<div><strong>${esc(metric.value)}</strong><span>${esc(metric.label)}</span></div>`).join("")}</div>`;
+}
+
+function stakeholderQuestionPanel(group) {
+  const completed = completedQuestionFeedback(group);
+  if (!completed.length) return `<p class="summary-text">No completed question feedback yet.</p>`;
+  return `<div class="question-summary-list stakeholder-question-list">${completed.map(({ question }) => `<div><strong>Q${question.id}</strong><p>${esc(buildQuestionSummary(group, question))}</p></div>`).join("")}</div>`;
+}
+
+function stakeholderMiniScoreList(group) {
+  const reviews = miniReviewsForGroup(group);
+  if (!reviews.length) return "";
+  return `<div class="stakeholder-score-pills">${reviews.map(review => `<span>${esc(review.juryName || "Jury")}: ${miniProjectScore(review)}/${miniProjectTotal}</span>`).join("")}</div>`;
+}
+
+function stakeholderMadaScoreList(group) {
+  const reviews = madaReviewsForGroup(group);
+  if (!reviews.length) return "";
+  return `<div class="stakeholder-score-pills">${reviews.map(review => `<span>${esc(madaFirstName(review.juryName || "Jury"))}: ${madaProjectScore(review)}/${madaProjectTotal}</span>`).join("")}</div>`;
+}
+
+function stakeholderNewbieCard(person, group) {
+  const questionNotes = participantQuestionNotes(person, group);
+  const miniNotes = participantMiniNotes(person, group);
+  const noteCount = questionNotes.length + miniNotes.length;
+  const summary = participantStakeholderFeedback(person, group);
+  return `<details class="stakeholder-newbie-card"><summary>${participantNameBlock(person)}<span>${noteCount} note${noteCount === 1 ? "" : "s"}</span></summary><div class="stakeholder-newbie-body"><p>${esc(summary)}</p><div class="stakeholder-newbie-points"><span>Group question score: <b>${groupScore(group)}/${knownTotalMarks()}</b></span><span>Mini-project average: <b>${miniProjectAverage(group)}/${miniProjectTotal}</b></span></div>${questionNotes.length ? `<h4>Question feedback</h4><ul>${questionNotes.map(item => `<li><b>Q${esc(item.qid)} · ${esc(item.mentor)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${miniNotes.length ? `<h4>Mini-project feedback</h4><ul>${miniNotes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}</div></details>`;
+}
+
+function stakeholderMadaNewbieCard(person, group) {
+  const notes = participantMadaNotes(person);
+  const summary = buildMadaPersonFeedback(person);
+  return `<details class="stakeholder-newbie-card"><summary>${participantNameBlock(person)}<span>${notes.length} note${notes.length === 1 ? "" : "s"}</span></summary><div class="stakeholder-newbie-body"><p>${esc(summary)}</p><div class="stakeholder-newbie-points"><span>Group mini-project average: <b>${madaGroupAverage(group)}/${madaProjectTotal}</b></span><span>Office: <b>${esc(group.office || "—")}</b></span></div>${notes.length ? `<h4>Mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}</div></details>`;
+}
+
+function stakeholderPayload(eventKey) {
+  if (eventKey === "madagascar") {
+    return {
+      event: stakeholderEventLabel(eventKey),
+      groups: madaGroups().map(group => ({
+        group: group.name,
+        office: group.office || "",
+        miniProjectAverage: `${madaGroupAverage(group)}/${madaProjectTotal}`,
+        miniProjectSummary: buildMadaGroupSummary(group),
+        participants: group.participants.map(person => ({
+          name: person,
+          feedback: buildMadaPersonFeedback(person)
+        }))
+      }))
+    };
+  }
+
+  return {
+    event: stakeholderEventLabel(eventKey),
+    groups: state.data.groups.map(group => ({
+      group: group.name,
+      completedQuestions: completedQuestionFeedback(group).map(({ question, correction }) => ({
+        question: `Q${question.id}: ${question.prompt}`,
+        marks: `${correction.marksAwarded ?? 0}/${correction.maxMarks ?? question.maxMarks ?? "?"}`,
+        groupFeedback: correction.groupRemark || correction.correction || "",
+        mentor: correction.mentorName || "Mentor"
+      })),
+      miniProjectAverage: `${miniProjectAverage(group)}/${miniProjectTotal}`,
+      miniProjectSummary: buildMiniProjectSummary(group),
+      participants: group.participants.map(person => ({
+        name: person,
+        feedback: participantStakeholderFeedback(person, group)
+      }))
+    }))
+  };
+}
+
+function stakeholderFallbackSummary(eventKey) {
+  const payload = stakeholderPayload(eventKey);
+  const rows = payload.groups
+    .map(group => {
+      const questionCount = group.completedQuestions?.length ? `${group.completedQuestions.length} completed question(s), ` : "";
+      return `${group.group}: ${questionCount}mini-project ${group.miniProjectAverage}. ${group.miniProjectSummary}`;
+    })
+    .join(" ");
+  return `${payload.event} stakeholder view: ${rows || "No submitted feedback yet."}`;
+}
+
+async function generateStakeholderOpinion(eventKey) {
+  if (!stakeholderEvents[eventKey]) throw new Error("Choose a stakeholder dashboard.");
+  const dashboard = stakeholderPayload(eventKey);
+  let summary = "";
+
+  if (remoteEnabled() && supabaseClient.functions?.invoke) {
+    const { data, error } = await supabaseClient.functions.invoke("stakeholder-summary", {
+      body: { eventKey, accessCode: state.stakeholderAccessCode?.[eventKey] || "", dashboard }
+    });
+    if (error) throw error;
+    summary = data?.summary || "";
+  }
+
+  state.stakeholderSummaries[eventKey] = summary || stakeholderFallbackSummary(eventKey);
+  saveLocal();
+  return state.stakeholderSummaries[eventKey];
+}
+
+function stakeholderAccessAdminView(eventKey) {
+  ensureStakeholderAccessCodes();
+  const record = state.stakeholderAccessCodes?.[eventKey] || {};
+  const active = record.active !== false;
+  const { code, privateUrl, shareText } = stakeholderAccessDetails(eventKey);
+  const setupWarning = state.stakeholderCodeSetupMissing ? `<div class="notice">Run the latest Supabase setup before sharing stakeholder links online. Until then, this link may only work on this browser.</div>` : "";
+  return adminAccordion({
+    eyebrow: "Stakeholder sharing",
+    title: `${stakeholderEventLabel(eventKey)} dashboard link`,
+    subtitle: active ? "Read-only stakeholder dashboard is active." : "Access is revoked. The link and code will not open the dashboard.",
+    badge: active ? "Active" : "Revoked",
+    extraClass: "mentor-code-admin-card",
+    content: `${setupWarning}<div class="admin-toggle-row"><span><strong>${active ? "Stakeholder access is active" : "Stakeholder access is revoked"}</strong><small>${active ? "Stakeholders with the private URL/code can view this read-only dashboard." : "The private URL/code is blocked until you enable access again or regenerate a new code."}</small></span>${active ? `<button class="danger-mini" type="button" data-revoke-stakeholder-access="${esc(eventKey)}">Revoke access</button>` : `<button class="primary" type="button" data-enable-stakeholder-access="${esc(eventKey)}">Enable access</button>`}</div><div class="mentor-code-grid"><div class="mentor-code-row"><span class="avatar">S</span><div><strong>${esc(stakeholderEventLabel(eventKey))}</strong><code>${esc(code)}</code><small class="mentor-url-line">${esc(privateUrl)}</small></div><div class="mentor-code-actions"><button class="secondary" type="button" data-copy-text="${esc(privateUrl)}">Copy URL</button><button class="secondary" type="button" data-copy-text="${esc(code)}">Copy code</button><button class="secondary" type="button" data-copy-text="${esc(shareText)}">Copy share text</button><button class="secondary" type="button" data-preview-stakeholder="${esc(eventKey)}">Preview</button><button class="danger-mini" type="button" data-regenerate-stakeholder-code="${esc(eventKey)}">Change code</button></div></div></div>`
+  });
+}
+
+function stakeholderAccessView(eventKey = "mauritius", message = "") {
+  const label = stakeholderEventLabel(eventKey);
+  shell(`<main class="page simple-page"><section class="welcome-panel stakeholder-gate"><div><p class="eyebrow orange-eyebrow">Stakeholder access</p><h1>${esc(label)} dashboard</h1><p class="subtle">Enter the private code from admin to open the read-only stakeholder dashboard.</p>${message ? `<div class="mentor-code-error">${esc(message)}</div>` : ""}<form id="stakeholder-code-form" data-event-key="${esc(eventKey)}" class="stakeholder-code-form"><label>Access code<input name="stakeholderCode" type="text" autocomplete="one-time-code" placeholder="SP-SHARE-XXXX-XXXX-XXXX" required></label><button class="primary" type="submit">Open dashboard</button></form></div></section></main>`);
+}
+
+function stakeholderDashboard(eventKey) {
+  const isMada = eventKey === "madagascar";
+  const rows = isMada ? madaScoreboard() : combinedScoreboard();
+  const summary = state.stakeholderSummaries?.[eventKey] || stakeholderFallbackSummary(eventKey);
+  const cards = isMada
+    ? madaGroups().map(group => `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office || "")}</p><h2>Group dashboard</h2></div><span class="ai-badge">${madaGroupAverage(group)}/${madaProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${madaGroupAverage(group)}/${madaProjectTotal}`, label: "Mini-project average" }, { value: String(madaReviewsForGroup(group).length), label: "Jury reviews" }, { value: String(group.participants.length), label: "Newbies" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildMadaGroupSummary(group))}</p>${stakeholderMadaScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${madaProjectBreakdownView(group)}</details><h3>Newbie dashboard</h3><div class="stakeholder-newbie-grid">${group.participants.map(person => stakeholderMadaNewbieCard(person, group)).join("")}</div></article>`).join("")
+    : state.data.groups.map(group => {
+      const completed = completedQuestionFeedback(group);
+      const total = groupScore(group) + miniProjectAverage(group);
+      return `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group dashboard</h2></div><span class="ai-badge">${total}/${knownTotalMarks() + miniProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${total}/${knownTotalMarks() + miniProjectTotal}`, label: "Overall points" }, { value: `${groupScore(group)}/${knownTotalMarks()}`, label: "Question points" }, { value: `${miniProjectAverage(group)}/${miniProjectTotal}`, label: "Mini-project average" }, { value: `${completed.length}/${state.data.questions.length}`, label: "Completed questions" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildGroupSummary(group))}</p><h3>Completed questions</h3>${stakeholderQuestionPanel(group)}<h3>Mini project</h3>${stakeholderMiniScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${miniProjectBreakdownView(group)}</details><h3>Newbie dashboard</h3><div class="stakeholder-newbie-grid">${group.participants.map(person => stakeholderNewbieCard(person, group)).join("")}</div></article>`;
+    }).join("");
+
+  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions"><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button><button class="primary" data-action="stakeholder-summary" data-event-key="${esc(eventKey)}">OpenAI opinion</button></div></section><section class="stats">${rows.slice(0, 4).map((row, index) => `<div class="stat"><strong>${index + 1}</strong><span>${esc(row.group.name)} · ${esc(row.total !== undefined ? `${row.total}/${row.max}` : `${row.average}/${row.max}`)}</span></div>`).join("")}</section><section class="card report-card stakeholder-opinion"><div class="report-heading"><div><p class="eyebrow">Stakeholder opinion</p><h2>OpenAI-ready summary</h2></div><span class="ai-badge">${remoteEnabled() ? "Secure function" : "Local fallback"}</span></div><p class="summary-text">${esc(summary)}</p></section><section class="report-stack">${cards}</section></main>`);
+}
+
+async function openStakeholderDashboard() {
+  const params = new URLSearchParams(location.search);
+  const eventKey = stakeholderEvents[params.get("stakeholder")] ? params.get("stakeholder") : "mauritius";
+  const code = params.get("stakeholderAccess") || params.get("stakeholderCode") || "";
+
+  if (!stakeholderAccessIsCurrent(eventKey)) {
+    if (!code) return stakeholderAccessView(eventKey);
+    try {
+      const ok = await unlockStakeholderFromAccessCode(eventKey, code);
+      if (!ok) return stakeholderAccessView(eventKey, "This stakeholder link is no longer valid. Ask admin for the latest URL.");
+    } catch (error) {
+      return stakeholderAccessView(eventKey, friendlyError(error, "Could not verify this stakeholder link. Try again."));
+    }
+  }
+  stakeholderDashboard(eventKey);
+}
+
 function miniProjectTopicAdminView() {
   const topicOptions = topicKey => [
     `<option value="">— Unassigned / remove title —</option>`,
@@ -3038,7 +3399,7 @@ function madaAdminPage() {
   const scoreRows = madaScoreboard();
   const leader = scoreRows[0];
   const generatedCount = Object.keys(state.reports).filter(key => key.startsWith("mada-group|") || key.startsWith("mada-person|")).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${stakeholderAccessAdminView("madagascar")}${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
 }
 
 function buildPersonFeedback(person) {
@@ -3200,7 +3561,7 @@ function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${mentorManagementView()}${newbieGroupsEditorView("mauritius")}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${stakeholderAccessAdminView("mauritius")}${adminDetailedGroupCardsView()}${mentorManagementView()}${newbieGroupsEditorView("mauritius")}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
 }
 
 async function openPublicForm() {
@@ -3247,6 +3608,7 @@ function notFoundView() {
 }
 
 function dashboard() {
+  if (location.hash === "#stakeholder") return openStakeholderDashboard();
   if (location.hash === "#admin-table") return state.session?.role === "admin" ? adminTablePage() : loginView();
   if (location.hash === "#admin") return state.session?.role === "admin" ? adminDashboard(lastAdminMentor) : loginView();
   if (location.hash === "#admin/spoon-madagascar") return state.session?.role === "admin" ? madaAdminPage() : loginView();
@@ -3294,6 +3656,20 @@ document.addEventListener("submit", async event => {
       mentorDashboard();
     } catch (error) {
       mentorAccessView(friendlyError(error, "Could not verify this code. Try again."));
+    }
+    return;
+  }
+
+  if (event.target.id === "stakeholder-code-form") {
+    const data = Object.fromEntries(new FormData(event.target));
+    const eventKey = event.target.dataset.eventKey || "mauritius";
+    try {
+      const ok = await unlockStakeholderFromAccessCode(eventKey, data.stakeholderCode);
+      if (!ok) return stakeholderAccessView(eventKey, "This stakeholder code is not valid. Ask admin for the latest code.");
+      showToast(`Stakeholder dashboard unlocked for ${stakeholderEventLabel(eventKey)}`);
+      stakeholderDashboard(eventKey);
+    } catch (error) {
+      stakeholderAccessView(eventKey, friendlyError(error, "Could not verify this code. Try again."));
     }
     return;
   }
@@ -3590,6 +3966,51 @@ document.addEventListener("click", async event => {
     }
     return;
   }
+  if (button.dataset.regenerateStakeholderCode) {
+    const eventKey = button.dataset.regenerateStakeholderCode;
+    const ok = confirm(`Regenerate the ${stakeholderEventLabel(eventKey)} stakeholder link? The old stakeholder URL will stop working.`);
+    if (!ok) return;
+
+    try {
+      await regenerateStakeholderAccessCode(eventKey);
+      showToast(`✓ New stakeholder link generated for ${stakeholderEventLabel(eventKey)}`);
+      eventKey === "madagascar" ? madaAdminPage() : adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not regenerate stakeholder link. Try again."));
+    }
+    return;
+  }
+  if (button.dataset.revokeStakeholderAccess) {
+    const eventKey = button.dataset.revokeStakeholderAccess;
+    const ok = confirm(`Revoke ${stakeholderEventLabel(eventKey)} stakeholder dashboard access? The current URL and code will stop opening the dashboard.`);
+    if (!ok) return;
+
+    try {
+      await setStakeholderAccessActive(eventKey, false);
+      showToast(`✓ ${stakeholderEventLabel(eventKey)} stakeholder access revoked`);
+      eventKey === "madagascar" ? madaAdminPage() : adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not revoke stakeholder access."));
+    }
+    return;
+  }
+  if (button.dataset.enableStakeholderAccess) {
+    const eventKey = button.dataset.enableStakeholderAccess;
+    try {
+      await setStakeholderAccessActive(eventKey, true);
+      showToast(`✓ ${stakeholderEventLabel(eventKey)} stakeholder access enabled`);
+      eventKey === "madagascar" ? madaAdminPage() : adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not enable stakeholder access."));
+    }
+    return;
+  }
+  if (button.dataset.previewStakeholder) {
+    const eventKey = button.dataset.previewStakeholder;
+    const { privateUrl } = stakeholderAccessDetails(eventKey);
+    location.href = privateUrl;
+    return;
+  }
   if (button.dataset.regenerateMentorCode) {
     const name = button.dataset.regenerateMentorCode;
     const ok = confirm(`Regenerate ${name}'s mentor access code? Their old code will stop being the shared current code.`);
@@ -3685,6 +4106,25 @@ document.addEventListener("click", async event => {
   }
   if (button.dataset.action === "return-current") dashboard();
   if (button.dataset.action === "public-form") openPublicForm();
+  if (button.dataset.action === "refresh-stakeholder") {
+    await loadSharedData({ includeAdminData: false });
+    stakeholderDashboard(button.dataset.eventKey || "mauritius");
+    showToast("✓ Stakeholder data refreshed");
+    return;
+  }
+  if (button.dataset.action === "stakeholder-summary") {
+    const eventKey = button.dataset.eventKey || "mauritius";
+    try {
+      showToast(remoteEnabled() ? "Generating OpenAI opinion..." : "Generating local stakeholder summary...");
+      await generateStakeholderOpinion(eventKey);
+      stakeholderDashboard(eventKey);
+      showToast("✓ Stakeholder opinion ready");
+    } catch (error) {
+      console.error("Stakeholder summary failed", error);
+      showToast(friendlyError(error, "Could not generate the stakeholder opinion."));
+    }
+    return;
+  }
   if (button.dataset.action === "admin-table") {
     location.hash = "admin-table";
     if (state.session?.role !== "admin") return loginView();

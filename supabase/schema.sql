@@ -105,6 +105,14 @@ create table if not exists public.jury_access_settings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.stakeholder_access_codes (
+  event_key text primary key check (event_key in ('mauritius', 'madagascar')),
+  access_code text not null unique,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.event_groups (
   event_key text not null check (event_key in ('mauritius', 'madagascar')),
   group_id integer not null check (group_id > 0),
@@ -212,6 +220,12 @@ on conflict (jury_name) do nothing;
 insert into public.jury_access_settings (id, public_access)
 values (true, false)
 on conflict (id) do nothing;
+
+insert into public.stakeholder_access_codes (event_key, access_code, active)
+values
+  ('mauritius', 'SP-SHARE-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)) || '-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)) || '-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)), true),
+  ('madagascar', 'SP-SHARE-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)) || '-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)) || '-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)), true)
+on conflict (event_key) do nothing;
 
 insert into public.event_groups (event_key, group_id, group_name, office, participants, active)
 values
@@ -362,6 +376,22 @@ as $$
   limit 1;
 $$;
 
+create or replace function public.verify_stakeholder_access_code(requested_event_key text, submitted_code text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.stakeholder_access_codes
+    where event_key = lower(trim(requested_event_key))
+      and active = true
+      and upper(access_code) = upper(trim(submitted_code))
+  );
+$$;
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -390,6 +420,11 @@ for each row execute function public.set_updated_at();
 drop trigger if exists jury_access_settings_updated_at on public.jury_access_settings;
 create trigger jury_access_settings_updated_at
 before update on public.jury_access_settings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists stakeholder_access_codes_updated_at on public.stakeholder_access_codes;
+create trigger stakeholder_access_codes_updated_at
+before update on public.stakeholder_access_codes
 for each row execute function public.set_updated_at();
 
 drop trigger if exists event_groups_updated_at on public.event_groups;
@@ -507,6 +542,7 @@ alter table public.mentor_access_codes enable row level security;
 alter table public.juries enable row level security;
 alter table public.jury_access_codes enable row level security;
 alter table public.jury_access_settings enable row level security;
+alter table public.stakeholder_access_codes enable row level security;
 alter table public.event_groups enable row level security;
 alter table public.newbie_photos enable row level security;
 alter table public.mini_project_reviews enable row level security;
@@ -529,6 +565,7 @@ set
 grant usage on schema public to anon, authenticated;
 grant execute on function public.verify_mentor_access_code(text) to anon, authenticated;
 grant execute on function public.verify_jury_access_code(text) to anon, authenticated;
+grant execute on function public.verify_stakeholder_access_code(text, text) to anon, authenticated;
 grant select on public.mentors to anon, authenticated;
 grant insert, update, delete on public.mentors to authenticated;
 grant select, insert, update, delete on public.mentor_access_codes to authenticated;
@@ -537,6 +574,7 @@ grant insert, update, delete on public.juries to authenticated;
 grant select, insert, update, delete on public.jury_access_codes to authenticated;
 grant select on public.jury_access_settings to anon, authenticated;
 grant insert, update, delete on public.jury_access_settings to authenticated;
+grant select, insert, update, delete on public.stakeholder_access_codes to authenticated;
 grant select on public.event_groups to anon, authenticated;
 grant insert, update, delete on public.event_groups to authenticated;
 grant select on public.newbie_photos to anon, authenticated;
@@ -617,6 +655,19 @@ using (true);
 drop policy if exists "admin manage jury access settings" on public.jury_access_settings;
 create policy "admin manage jury access settings"
 on public.jury_access_settings for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "admin read stakeholder access codes" on public.stakeholder_access_codes;
+create policy "admin read stakeholder access codes"
+on public.stakeholder_access_codes for select
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin manage stakeholder access codes" on public.stakeholder_access_codes;
+create policy "admin manage stakeholder access codes"
+on public.stakeholder_access_codes for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
@@ -864,6 +915,12 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.jury_access_settings;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.stakeholder_access_codes;
 exception when duplicate_object then null;
 end $$;
 
