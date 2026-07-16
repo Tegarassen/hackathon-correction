@@ -76,10 +76,33 @@ create table if not exists public.mentors (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.mentor_access_codes (
+  mentor_name text primary key references public.mentors(name) on delete cascade,
+  access_code text not null unique,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.juries (
   name text primary key,
   active boolean not null default true,
   created_at timestamptz not null default now()
+);
+
+create table if not exists public.jury_access_codes (
+  jury_name text primary key references public.juries(name) on delete cascade,
+  access_code text not null unique,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.jury_access_settings (
+  id boolean primary key default true check (id = true),
+  public_access boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.newbie_photos (
@@ -138,6 +161,15 @@ values
 on conflict (name) do update
 set active = true;
 
+insert into public.mentor_access_codes (mentor_name, access_code, active)
+select
+  name,
+  'SP-MENTOR-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)) || '-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)),
+  true
+from public.mentors
+where active = true
+on conflict (mentor_name) do nothing;
+
 insert into public.juries (name, active)
 values
   ('Varun', true),
@@ -155,6 +187,19 @@ values
   ('Noorvesh', true)
 on conflict (name) do update
 set active = true;
+
+insert into public.jury_access_codes (jury_name, access_code, active)
+select
+  name,
+  'SP-JURY-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)) || '-' || upper(substr(encode(gen_random_bytes(3), 'hex'), 1, 4)),
+  true
+from public.juries
+where active = true
+on conflict (jury_name) do nothing;
+
+insert into public.jury_access_settings (id, public_access)
+values (true, false)
+on conflict (id) do nothing;
 
 -- Migration helpers for projects that previously used one correction per mentor.
 alter table public.group_corrections
@@ -263,6 +308,34 @@ as $$
   );
 $$;
 
+create or replace function public.verify_mentor_access_code(submitted_code text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select mentor_name
+  from public.mentor_access_codes
+  where active = true
+    and upper(access_code) = upper(trim(submitted_code))
+  limit 1;
+$$;
+
+create or replace function public.verify_jury_access_code(submitted_code text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jury_name
+  from public.jury_access_codes
+  where active = true
+    and upper(access_code) = upper(trim(submitted_code))
+  limit 1;
+$$;
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -276,6 +349,21 @@ $$;
 drop trigger if exists group_corrections_updated_at on public.group_corrections;
 create trigger group_corrections_updated_at
 before update on public.group_corrections
+for each row execute function public.set_updated_at();
+
+drop trigger if exists mentor_access_codes_updated_at on public.mentor_access_codes;
+create trigger mentor_access_codes_updated_at
+before update on public.mentor_access_codes
+for each row execute function public.set_updated_at();
+
+drop trigger if exists jury_access_codes_updated_at on public.jury_access_codes;
+create trigger jury_access_codes_updated_at
+before update on public.jury_access_codes
+for each row execute function public.set_updated_at();
+
+drop trigger if exists jury_access_settings_updated_at on public.jury_access_settings;
+create trigger jury_access_settings_updated_at
+before update on public.jury_access_settings
 for each row execute function public.set_updated_at();
 
 drop trigger if exists individual_remarks_updated_at on public.individual_remarks;
@@ -384,7 +472,10 @@ alter table public.ai_reports enable row level security;
 alter table public.change_history enable row level security;
 alter table public.admin_users enable row level security;
 alter table public.mentors enable row level security;
+alter table public.mentor_access_codes enable row level security;
 alter table public.juries enable row level security;
+alter table public.jury_access_codes enable row level security;
+alter table public.jury_access_settings enable row level security;
 alter table public.newbie_photos enable row level security;
 alter table public.mini_project_reviews enable row level security;
 alter table public.mini_project_assignments enable row level security;
@@ -404,10 +495,16 @@ set
   allowed_mime_types = excluded.allowed_mime_types;
 
 grant usage on schema public to anon, authenticated;
+grant execute on function public.verify_mentor_access_code(text) to anon, authenticated;
+grant execute on function public.verify_jury_access_code(text) to anon, authenticated;
 grant select on public.mentors to anon, authenticated;
 grant insert, update, delete on public.mentors to authenticated;
+grant select, insert, update, delete on public.mentor_access_codes to authenticated;
 grant select on public.juries to anon, authenticated;
 grant insert, update, delete on public.juries to authenticated;
+grant select, insert, update, delete on public.jury_access_codes to authenticated;
+grant select on public.jury_access_settings to anon, authenticated;
+grant insert, update, delete on public.jury_access_settings to authenticated;
 grant select on public.newbie_photos to anon, authenticated;
 grant insert, update, delete on public.newbie_photos to authenticated;
 grant select, insert, update, delete on public.mini_project_reviews to anon, authenticated;
@@ -438,6 +535,19 @@ to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
+drop policy if exists "admin read mentor access codes" on public.mentor_access_codes;
+create policy "admin read mentor access codes"
+on public.mentor_access_codes for select
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin manage mentor access codes" on public.mentor_access_codes;
+create policy "admin manage mentor access codes"
+on public.mentor_access_codes for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
 drop policy if exists "public read juries" on public.juries;
 create policy "public read juries"
 on public.juries for select
@@ -447,6 +557,32 @@ using (active = true);
 drop policy if exists "admin manage juries" on public.juries;
 create policy "admin manage juries"
 on public.juries for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "admin read jury access codes" on public.jury_access_codes;
+create policy "admin read jury access codes"
+on public.jury_access_codes for select
+to authenticated
+using (public.is_admin());
+
+drop policy if exists "admin manage jury access codes" on public.jury_access_codes;
+create policy "admin manage jury access codes"
+on public.jury_access_codes for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "public read jury access settings" on public.jury_access_settings;
+create policy "public read jury access settings"
+on public.jury_access_settings for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "admin manage jury access settings" on public.jury_access_settings;
+create policy "admin manage jury access settings"
+on public.jury_access_settings for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
@@ -662,7 +798,25 @@ end $$;
 
 do $$
 begin
+  alter publication supabase_realtime add table public.mentor_access_codes;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
   alter publication supabase_realtime add table public.juries;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.jury_access_codes;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.jury_access_settings;
 exception when duplicate_object then null;
 end $$;
 
