@@ -105,6 +105,18 @@ create table if not exists public.jury_access_settings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.event_groups (
+  event_key text not null check (event_key in ('mauritius', 'madagascar')),
+  group_id integer not null check (group_id > 0),
+  group_name text not null,
+  office text,
+  participants jsonb not null default '[]'::jsonb,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (event_key, group_id)
+);
+
 create table if not exists public.newbie_photos (
   id uuid primary key default gen_random_uuid(),
   participant_name text not null unique,
@@ -200,6 +212,20 @@ on conflict (jury_name) do nothing;
 insert into public.jury_access_settings (id, public_access)
 values (true, false)
 on conflict (id) do nothing;
+
+insert into public.event_groups (event_key, group_id, group_name, office, participants, active)
+values
+  ('mauritius', 1, 'Group 1', null, '["Sollinselvan Curpen", "Luvraj Kaundun", "Uzaïrah Bibi Mohung", "Jeevesh Kaleeah", "Lailie Tia Chakowa"]'::jsonb, true),
+  ('mauritius', 2, 'Group 2', null, '["Vishanraj Daby", "Vamkesh Jeerasoo", "Keashvi Nerisha Bhikoo", "Nahida Rojoa", "Ihsaan Ramjanee"]'::jsonb, true),
+  ('mauritius', 3, 'Group 3', null, '["Ghanishth Parsad Sewtohul", "Hiresha Rakissoon", "Sivakumara Chengubraydoo", "Smriti Gavina Beharee", "Jerissen Narainen"]'::jsonb, true),
+  ('mauritius', 4, 'Group 4', null, '["Tejasweenee Doya", "Krishi Narrayen", "Adarsh Nareshsing Bahadoor", "Nilesh Kumar Sahadew", "Vashistha Ittoo", "Medhini Darshee Foolell"]'::jsonb, true),
+  ('mauritius', 5, 'Group 5', null, '["Ojaswita Nund", "Akash Boodram", "Dushantsingh Ramdass", "Khooshboo Ramdewar", "Muhammad Umair Parthasee", "Vedrajsing Jankee"]'::jsonb, true),
+  ('madagascar', 1, 'Diego Group 1', 'Diego', '["ANDRY Nizwami Ibrahim", "RANAIVOSOA Edwino"]'::jsonb, true),
+  ('madagascar', 2, 'Fina Group 1', 'Fina', '["ANDRITIANA Saotra Idealilalaina", "RAZAFINATOANDRO Ando Henri", "ANDRIANTSILAVINA Tsiferana Heritsilavo", "AMBOARAMPITIAVANA Nomena Sarobidy"]'::jsonb, true),
+  ('madagascar', 3, 'Fina Group 2', 'Fina', '["RAKOTONIRINA Andrianina Laïscia", "BEMAZAVA julio", "RALAIVAO Ambinintsoa Francky", "VALISOAFANDRESENA Setraniaina Andriamampiandra"]'::jsonb, true),
+  ('madagascar', 4, 'Tana Group 1', 'Tana', '["ANDRIANARIVONY Zo Michaël", "RAKOTOARISOA Andy Ny Rindra", "MBOLATSIORY Rihantiana Tiarintsoa", "VOLOLONIRINA Doris Sylvie", "RANDRIANARIVELO Stéphan"]'::jsonb, true),
+  ('madagascar', 5, 'Tana Group 2', 'Tana', '["MAMPIONONA Njakarimanana Nerson", "RABENARIVO Ryan Lizka", "Rakotonirina Tahina Fanomezantsoa", "RAZAFIMAMY Antonino Iraky Ny Avo", "RATOVONJOELY Ny Ando Irintsoa"]'::jsonb, true)
+on conflict (event_key, group_id) do nothing;
 
 -- Migration helpers for projects that previously used one correction per mentor.
 alter table public.group_corrections
@@ -366,6 +392,11 @@ create trigger jury_access_settings_updated_at
 before update on public.jury_access_settings
 for each row execute function public.set_updated_at();
 
+drop trigger if exists event_groups_updated_at on public.event_groups;
+create trigger event_groups_updated_at
+before update on public.event_groups
+for each row execute function public.set_updated_at();
+
 drop trigger if exists individual_remarks_updated_at on public.individual_remarks;
 create trigger individual_remarks_updated_at
 before update on public.individual_remarks
@@ -476,6 +507,7 @@ alter table public.mentor_access_codes enable row level security;
 alter table public.juries enable row level security;
 alter table public.jury_access_codes enable row level security;
 alter table public.jury_access_settings enable row level security;
+alter table public.event_groups enable row level security;
 alter table public.newbie_photos enable row level security;
 alter table public.mini_project_reviews enable row level security;
 alter table public.mini_project_assignments enable row level security;
@@ -505,6 +537,8 @@ grant insert, update, delete on public.juries to authenticated;
 grant select, insert, update, delete on public.jury_access_codes to authenticated;
 grant select on public.jury_access_settings to anon, authenticated;
 grant insert, update, delete on public.jury_access_settings to authenticated;
+grant select on public.event_groups to anon, authenticated;
+grant insert, update, delete on public.event_groups to authenticated;
 grant select on public.newbie_photos to anon, authenticated;
 grant insert, update, delete on public.newbie_photos to authenticated;
 grant select, insert, update, delete on public.mini_project_reviews to anon, authenticated;
@@ -583,6 +617,19 @@ using (true);
 drop policy if exists "admin manage jury access settings" on public.jury_access_settings;
 create policy "admin manage jury access settings"
 on public.jury_access_settings for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "public read event groups" on public.event_groups;
+create policy "public read event groups"
+on public.event_groups for select
+to anon, authenticated
+using (active = true);
+
+drop policy if exists "admin manage event groups" on public.event_groups;
+create policy "admin manage event groups"
+on public.event_groups for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
@@ -817,6 +864,12 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.jury_access_settings;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.event_groups;
 exception when duplicate_object then null;
 end $$;
 
