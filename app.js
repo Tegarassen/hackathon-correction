@@ -142,6 +142,7 @@ state = {
   activeMadaJury: state.activeMadaJury || madaJuriesSeed[0]?.name || null,
   madaReviews: state.madaReviews || {},
   madaAssignments: state.madaAssignments || {},
+  madaGroups: state.madaGroups || madaGroupsSeed,
   madaJuryView: state.madaJuryView || "landing",
   activeMadaGroup: state.activeMadaGroup || null,
   participantPhotos: state.participantPhotos || {},
@@ -149,7 +150,7 @@ state = {
   reports: state.reports || {},
   changeHistory: state.changeHistory || [],
   syncStatus: "loading",
-  data: seed
+  data: { ...seed, groups: state.data?.groups?.length ? state.data.groups : seed.groups }
 };
 
 if (!state.mentors?.length) state.mentors = defaultMentors;
@@ -203,8 +204,9 @@ const topicByKey = key => miniProjectTopics.find(topic => topic.key === key);
 const topicFullTitle = topic => topic ? `${topic.title}: ${topic.subtitle}` : "";
 const assignmentForGroup = group => state.miniProjectAssignments?.[String(group?.id)] || null;
 const topicForGroup = group => topicByKey(assignmentForGroup(group)?.topicKey);
-const madaGroupById = id => madaGroupsSeed.find(group => group.id === Number(id));
-const madaGroupsForOffice = office => madaGroupsSeed.filter(group => group.office === office);
+const madaGroups = () => state.madaGroups?.length ? state.madaGroups : madaGroupsSeed;
+const madaGroupById = id => madaGroups().find(group => group.id === Number(id));
+const madaGroupsForOffice = office => madaGroups().filter(group => group.office === office);
 const madaTopicByKey = key => madaTopics.find(topic => topic.key === key);
 const madaTopicFullTitle = topic => topic ? `${topic.title}: ${topic.subtitle}` : "";
 const madaAssignmentForGroup = group => state.madaAssignments?.[String(group?.id)] || null;
@@ -327,7 +329,7 @@ const madaGroupAverage = group => {
   if (!reviews.length) return 0;
   return Math.round((reviews.reduce((sum, review) => sum + madaProjectScore(review), 0) / reviews.length) * 10) / 10;
 };
-const madaScoreboard = () => madaGroupsSeed
+const madaScoreboard = () => madaGroups()
   .map(group => ({ group, average: madaGroupAverage(group), max: madaProjectTotal, juryCount: madaReviewsForGroup(group).length }))
   .sort((a, b) => b.average - a.average);
 
@@ -1169,6 +1171,24 @@ function applyJuryAccessSettingRows(rows = []) {
   if (row) state.juryAccessPublic = row.public_access === true;
 }
 
+function applyEventGroupRows(rows = []) {
+  const activeRows = rows.filter(row => row.active !== false);
+  const buildGroups = eventKey => activeRows
+    .filter(row => row.event_key === eventKey)
+    .sort((a, b) => Number(a.group_id) - Number(b.group_id))
+    .map(row => ({
+      id: Number(row.group_id),
+      name: row.group_name || `Group ${row.group_id}`,
+      office: row.office || undefined,
+      participants: Array.isArray(row.participants) ? row.participants.filter(Boolean) : []
+    }));
+
+  const mauritiusGroups = buildGroups("mauritius");
+  const madagascarGroups = buildGroups("madagascar");
+  if (mauritiusGroups.length) state.data.groups = mauritiusGroups;
+  if (madagascarGroups.length) state.madaGroups = madagascarGroups;
+}
+
 function applyMadaJuryRows(rows = []) {
   const activeMadaJuries = rows
     .filter(row => row.active !== false)
@@ -1761,12 +1781,13 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
+    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, eventGroupsResult, projectAssignments, corrections, remarks, miniReviews, photoRecords, reports, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       includeAdminData ? supabaseClient.from("mentor_access_codes").select("*").order("mentor_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("juries").select("*").order("name", { ascending: true }),
       includeAdminData ? supabaseClient.from("jury_access_codes").select("*").order("jury_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("jury_access_settings").select("*").limit(1),
+      supabaseClient.from("event_groups").select("*").order("event_key", { ascending: true }).order("group_id", { ascending: true }),
       supabaseClient.from("mini_project_assignments").select("*").order("group_id", { ascending: true }),
       supabaseClient.from("group_corrections").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("individual_remarks").select("*").order("updated_at", { ascending: false }),
@@ -1789,6 +1810,7 @@ async function loadSharedData(options = {}) {
     if (state.mentorCodeSetupMissing) console.warn("Could not load mentor_access_codes table. Run the latest setup script to share mentor codes across devices.", mentorCodesResult.error);
     state.juryCodeSetupMissing = Boolean(jurySettingsResult.error) || (includeAdminData && Boolean(juryCodesResult.error));
     if (state.juryCodeSetupMissing) console.warn("Could not load jury access tables. Run the latest setup script to share jury codes/settings across devices.", jurySettingsResult.error || juryCodesResult.error);
+    if (eventGroupsResult.error) console.warn("Could not load event_groups table. Group edits will stay local until the setup script is run.", eventGroupsResult.error);
     if (madaAssignments.error) console.warn("Could not load spoon_madagascar_assignments table. Run the Spoon Madagascar SQL setup when ready.", madaAssignments.error);
     if (madaReviews.error) console.warn("Could not load spoon_madagascar_reviews table. Run the Spoon Madagascar SQL setup when ready.", madaReviews.error);
     if (!mentorsResult.error) applyMentorRows(mentorsResult.data);
@@ -1797,6 +1819,7 @@ async function loadSharedData(options = {}) {
     else ensureMentorAccessCodes();
     if (!juriesResult.error) applyJuryRows(juriesResult.data);
     else console.warn("Could not load juries table; using local jury list.", juriesResult.error);
+    if (!eventGroupsResult.error) applyEventGroupRows(eventGroupsResult.data);
     if (!jurySettingsResult.error) applyJuryAccessSettingRows(jurySettingsResult.data);
     if (includeAdminData && !juryCodesResult.error) applyJuryAccessCodeRows(juryCodesResult.data);
     else ensureJuryAccessCodes();
@@ -1938,6 +1961,14 @@ function subscribeSharedData() {
     .on("postgres_changes", { event: "*", schema: "public", table: "jury_access_settings" }, payload => {
       if (payload.new) applyJuryAccessSettingRows([payload.new]);
       scheduleRefresh();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "event_groups" }, async () => {
+      const { data, error } = await supabaseClient.from("event_groups").select("*").order("event_key", { ascending: true }).order("group_id", { ascending: true });
+      if (!error) {
+        applyEventGroupRows(data);
+        scheduleRefresh();
+        scheduleMadaRefresh();
+      }
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "spoon_madagascar_juries" }, async () => {
       const { data, error } = await supabaseClient.from("spoon_madagascar_juries").select("*").order("name", { ascending: true });
@@ -2378,7 +2409,7 @@ async function saveMadaAssignmentsAsAdmin(formData) {
   const deleteGroupIds = [];
   const nextAssignments = {};
 
-  madaGroupsSeed.forEach(group => {
+  madaGroups().forEach(group => {
     const topicKey = formData[`madaTopic::${group.id}`] || "";
     const topic = madaTopicByKey(topicKey);
 
@@ -2874,7 +2905,7 @@ function madaTopicAdminView() {
     ...madaTopics.map(topic => `<option value="${esc(topic.key)}" ${topicKey === topic.key ? "selected" : ""}>${esc(madaTopicFullTitle(topic))}</option>`)
   ].join("");
 
-  return `<article class="card report-card mini-topic-admin-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar titles</p><h2>Assign, change, or unassign group topics</h2><p class="subtle">Choose a title to assign/change it, or choose “Unassigned / remove title” to remove it from the jury screens.</p></div><span class="ai-badge">${Object.keys(state.madaAssignments).length}/${madaGroupsSeed.length} assigned</span></div><form id="mada-topic-form" class="mini-topic-admin-form"><div class="mini-topic-admin-grid">${madaGroupsSeed.map(group => { const assignment = madaAssignmentForGroup(group); const topic = madaTopicByKey(assignment?.topicKey); return `<label><span><strong>${esc(group.name)}</strong><small class="mada-office-badge">${esc(group.office)}</small><small>${topic ? `Current: ${esc(topic.title)}` : "Currently unassigned"}</small></span><select name="madaTopic::${group.id}">${topicOptions(assignment?.topicKey)}</select></label>`; }).join("")}</div><details class="mini-topic-options"><summary>View the 3 topic briefs</summary>${madaTopics.map(topic => `<section><strong>${esc(madaTopicFullTitle(topic))}</strong><p>${esc(topic.brief)}</p><small><b>Bonus AI:</b> ${esc(topic.bonus)}</small></section>`).join("")}</details><button class="primary" type="submit">Save title changes</button></form></article>`;
+  return `<article class="card report-card mini-topic-admin-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar titles</p><h2>Assign, change, or unassign group topics</h2><p class="subtle">Choose a title to assign/change it, or choose “Unassigned / remove title” to remove it from the jury screens.</p></div><span class="ai-badge">${Object.keys(state.madaAssignments).length}/${madaGroups().length} assigned</span></div><form id="mada-topic-form" class="mini-topic-admin-form"><div class="mini-topic-admin-grid">${madaGroups().map(group => { const assignment = madaAssignmentForGroup(group); const topic = madaTopicByKey(assignment?.topicKey); return `<label><span><strong>${esc(group.name)}</strong><small class="mada-office-badge">${esc(group.office)}</small><small>${topic ? `Current: ${esc(topic.title)}` : "Currently unassigned"}</small></span><select name="madaTopic::${group.id}">${topicOptions(assignment?.topicKey)}</select></label>`; }).join("")}</div><details class="mini-topic-options"><summary>View the 3 topic briefs</summary>${madaTopics.map(topic => `<section><strong>${esc(madaTopicFullTitle(topic))}</strong><p>${esc(topic.brief)}</p><small><b>Bonus AI:</b> ${esc(topic.bonus)}</small></section>`).join("")}</details><button class="primary" type="submit">Save title changes</button></form></article>`;
 }
 
 function adminMiniReviewEditorView() {
@@ -2967,7 +2998,7 @@ function buildMadaPersonFeedback(person) {
 }
 
 function madaDetailedGroupCardsView() {
-  return madaGroupsSeed.map(group => {
+  return madaGroups().map(group => {
     const topic = madaTopicForGroup(group);
     const average = madaGroupAverage(group);
     return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office)}</p><h2>Group summary</h2>${topic ? `<p class="subtle">${esc(madaTopicFullTitle(topic))}</p>` : ""}</div><span class="ai-badge">${average}/${madaProjectTotal}</span></div><p class="summary-text">${esc(state.reports[`mada-group|${group.id}`] || buildMadaGroupSummary(group))}</p><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`mada-person|${person}`] || buildMadaPersonFeedback(person))}</p></div>`).join("")}</div></article>`;
@@ -2978,7 +3009,7 @@ async function persistMadaReports() {
   if (!remoteEnabled()) return;
 
   const rows = [];
-  madaGroupsSeed.forEach(group => {
+  madaGroups().forEach(group => {
     rows.push({
       report_key: `mada-group|${group.id}`,
       report_type: "group",
@@ -3007,7 +3038,7 @@ function madaAdminPage() {
   const scoreRows = madaScoreboard();
   const leader = scoreRows[0];
   const generatedCount = Object.keys(state.reports).filter(key => key.startsWith("mada-group|") || key.startsWith("mada-person|")).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroupsSeed.length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${madaDetailedGroupCardsView()}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
 }
 
 function buildPersonFeedback(person) {
@@ -3060,6 +3091,67 @@ function adminAccordion({ eyebrow, title, subtitle = "", badge = "", content = "
   return `<details class="card report-card admin-accordion ${extraClass}" ${open ? "open" : ""}><summary><span><small class="eyebrow">${esc(eyebrow)}</small><strong>${esc(title)}</strong>${subtitle ? `<em>${esc(subtitle)}</em>` : ""}</span>${badge ? `<span class="ai-badge">${esc(badge)}</span>` : ""}</summary><div class="admin-accordion-body">${content}</div></details>`;
 }
 
+function newbieGroupsEditorView(eventKey) {
+  const isMada = eventKey === "madagascar";
+  const groups = isMada ? madaGroups() : state.data.groups;
+  const offices = madaOffices.map(office => `<option value="${esc(office)}">${esc(office)}</option>`).join("");
+  const rows = groups
+    .slice()
+    .sort((a, b) => Number(a.id) - Number(b.id))
+    .map(group => `<section class="newbie-group-edit-row"><div class="newbie-group-edit-head"><span class="group-number">${esc(group.id)}</span><label>Group name<input name="name::${group.id}" value="${esc(group.name)}" required></label>${isMada ? `<label>Office<select name="office::${group.id}">${madaOffices.map(office => `<option value="${esc(office)}" ${group.office === office ? "selected" : ""}>${esc(office)}</option>`).join("")}</select></label>` : ""}</div><label>Participants <small>One participant per line</small><textarea name="participants::${group.id}" rows="5" required>${esc((group.participants || []).join("\n"))}</textarea></label></section>`)
+    .join("");
+
+  return adminAccordion({
+    eyebrow: isMada ? "Spoon Madagascar groups" : "Mauritius groups",
+    title: isMada ? "Edit Madagascar newbie groups" : "Edit Mauritius newbie groups",
+    subtitle: "Change group names and participant lists.",
+    badge: `${groups.length} groups`,
+    extraClass: "newbie-group-editor-card",
+    content: `<form id="${isMada ? "mada-groups-form" : "mauritius-groups-form"}" class="newbie-groups-form">${rows}<div class="sticky-actions admin-inline-actions"><button class="primary" type="submit">Save group changes</button></div></form>`
+  });
+}
+
+async function saveNewbieGroupsAsAdmin(eventKey, formData) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can change newbie groups.");
+  const isMada = eventKey === "madagascar";
+  const currentGroups = isMada ? madaGroups() : state.data.groups;
+  const nextGroups = currentGroups.map(group => {
+    const name = String(formData[`name::${group.id}`] || "").trim().replace(/\s+/g, " ");
+    const participants = String(formData[`participants::${group.id}`] || "")
+      .split(/\r?\n/)
+      .map(person => person.trim().replace(/\s+/g, " "))
+      .filter(Boolean);
+    const office = isMada ? (madaOffices.includes(formData[`office::${group.id}`]) ? formData[`office::${group.id}`] : group.office || madaOffices[0]) : undefined;
+    if (!name) throw new Error("Enter every group name.");
+    if (!participants.length) throw new Error("Each group needs at least one participant.");
+    return {
+      id: Number(group.id),
+      name,
+      ...(isMada ? { office } : {}),
+      participants
+    };
+  });
+
+  if (isMada) state.madaGroups = nextGroups;
+  else state.data.groups = nextGroups;
+  saveLocal();
+
+  if (!remoteEnabled()) return;
+
+  const rows = nextGroups.map(group => ({
+    event_key: isMada ? "madagascar" : "mauritius",
+    group_id: group.id,
+    group_name: group.name,
+    office: group.office || null,
+    participants: group.participants,
+    active: true
+  }));
+  const { error } = await supabaseClient
+    .from("event_groups")
+    .upsert(rows, { onConflict: "event_key,group_id" });
+  if (error) throw error;
+}
+
 function mentorAccessCodesView() {
   ensureMentorAccessCodes();
   const setupWarning = state.mentorCodeSetupMissing ? `<div class="notice">Run the latest <code>supabase/schema.sql</code> before sharing these codes online. Until then, these codes are only local to this browser.</div>` : "";
@@ -3108,7 +3200,7 @@ function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${mentorManagementView()}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminDetailedGroupCardsView()}${mentorManagementView()}${newbieGroupsEditorView("mauritius")}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
 }
 
 async function openPublicForm() {
@@ -3262,6 +3354,28 @@ document.addEventListener("submit", async event => {
     } catch (error) {
       console.error("Mini-project title save failed", error);
       showToast(friendlyError(error, "Could not save group titles. Try again."));
+    }
+  }
+
+  if (event.target.id === "mauritius-groups-form") {
+    const data = Object.fromEntries(new FormData(event.target));
+    try {
+      await saveNewbieGroupsAsAdmin("mauritius", data);
+      showToast(updatedOnlineMessage("Mauritius groups"));
+      adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not save Mauritius groups. Try again."));
+    }
+  }
+
+  if (event.target.id === "mada-groups-form") {
+    const data = Object.fromEntries(new FormData(event.target));
+    try {
+      await saveNewbieGroupsAsAdmin("madagascar", data);
+      showToast(updatedOnlineMessage("Madagascar groups"));
+      madaAdminPage();
+    } catch (error) {
+      showToast(friendlyError(error, "Could not save Madagascar groups. Try again."));
     }
   }
 
@@ -3798,7 +3912,7 @@ document.addEventListener("click", async event => {
   }
 
   if (button.dataset.action === "generate-mada-reports") {
-    madaGroupsSeed.forEach(group => {
+    madaGroups().forEach(group => {
       state.reports[`mada-group|${group.id}`] = buildMadaGroupSummary(group);
       group.participants.forEach(person => state.reports[`mada-person|${person}`] = buildMadaPersonFeedback(person));
     });
