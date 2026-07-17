@@ -112,6 +112,75 @@ const madaTopics = [
 // so both events are judged on an identical scale.
 const madaCriteria = miniProjectCriteria;
 const madaProjectTotal = miniProjectTotal;
+const madaQuestionTotal = 62;
+const madaCombinedTotal = madaQuestionTotal + madaProjectTotal;
+const madaMentorScoring = {
+  1: {
+    lead: "Yor",
+    office: "Diego",
+    questionScores: [2, 3, 6.5, 8, 6, 9, 6, 4, 7, 10],
+    total: 61.5,
+    groupFeedback: "Sur les exercices, ils donnent plus de ce qu'on a demandé car ils utilisent de l'interface web pour la majorité des réponses de l'exercice et optimisent les résultats. Ils ont même intégré un chatbot sur l'exercice 8. Malgré qu'ils ne sont que 2 dans l'équipe, ils savent bien travailler en équipe. Les tâches sont bien réparties.",
+    individualFeedback: {
+      "ANDRY Nizwami Ibrahim": "N'hésite pas à prendre le lead, à l'aise au coding, good team work. À l'aise sur l'implémentation des solutions proposées.",
+      "RANAIVOSOA Edwino": "Plutôt bon en décryptage, à l'aise au coding, à l'aise sur l'utilisation de l'IA, good team work. Trouve des solutions vite."
+    }
+  },
+  2: {
+    lead: "Giovanni",
+    office: "Fina",
+    questionScores: [2, 3, 7, 6, 6, 9, 6, 3, 7, 10],
+    total: 59,
+    groupFeedback: "Livraison rapide. Utilise l'IA.",
+    individualFeedback: {
+      "ANDRITIANA Saotra Idealilalaina": "Technically strong, team leader.",
+      "RAZAFINATOANDRO Ando Henri": "Animateur du groupe, un peu stressé lors des explications.",
+      "ANDRIANTSILAVINA Tsiferana Heritsilavo": "N'hésite pas à poser des questions.",
+      "ANDRIANARIVONY Zo Michaël": "Participe surtout dans les explications."
+    }
+  },
+  3: {
+    lead: "Giovanni",
+    office: "Fina",
+    questionScores: [2, 3, 7, 8, 4, 4, 6, 4, 7, 10],
+    total: 55,
+    groupFeedback: "Ils ont réparti les questions. Livraison rapide. Utilise l'IA.",
+    individualFeedback: {
+      "RAKOTONIRINA Andrianina Laïscia": "Good in Math, team leader.",
+      "BEMAZAVA julio": "Participe bien, intéressé Data/SQL.",
+      "RALAIVAO Ambinintsoa Francky": "Un peu silencieux, good team work.",
+      "MAMPIONONA Njakarimanana Nerson": "Good team work, intéressé Data/SQL.",
+      "VALISOAFANDRESENA Setraniaina Andriamampiandra": "N'hésite pas à poser des questions."
+    }
+  },
+  4: {
+    lead: "Manou",
+    office: "Tana",
+    questionScores: [2, 3, 7, 6.5, 6, 7, 5, 3.5, 6, 7],
+    total: 53,
+    groupFeedback: "Pas beaucoup de communication, mais arrive quand même à produire du bon résultat. Ce groupe prend les solutions existantes puis essaie de comprendre comment ça marche. Au-delà des sujets, ils ont essayé de coder, de comprendre les sujets et de faire plus que demandé.",
+    individualFeedback: {
+      "RAKOTOARISOA Andy Ny Rindra": "Ne parle pas beaucoup mais n'hésite pas à participer quand il le faut ou quand il y a des questions.",
+      "MBOLATSIORY Rihantiana Tiarintsoa": "N'hésite pas à poser des questions si besoin, pose beaucoup de questions. Bon techniquement.",
+      "VOLOLONIRINA Doris Sylvie": "Ne parle pas beaucoup, ne se met pas en avant, mais a quand même présenté certains sujets.",
+      "RANDRIANARIVELO Stéphan": "Ne parle pas beaucoup mais arrive à bien expliquer quand on lui demande."
+    }
+  },
+  5: {
+    lead: "Manou",
+    office: "Tana",
+    questionScores: [2, 1.5, 5, 7.5, 6, 4.5, 5, 3, 7, 8],
+    total: 49.5,
+    groupFeedback: "Beaucoup de discussions, méthode intéressante pour la question Q1. Moins rapide, utilise moins l'IA pour les tâches et pour coder. Ce groupe essaie de comprendre d'abord par lui-même avant de se tourner vers d'autres documentations. Ils n'ont pas bien lu les requirements de la question 6. Au-delà des sujets, ils ont essayé de coder, de comprendre les sujets et de faire plus que demandé.",
+    individualFeedback: {
+      "AMBOARAMPITIAVANA Nomena Sarobidy": "Très active, propose beaucoup de solutions, souvent pas très pertinentes, et participe aux discussions de groupe.",
+      "RABENARIVO Ryan Lizka": "Anime le groupe, pose des questions, explication pas très fluide.",
+      "Rakotonirina Tahina Fanomezantsoa": "Ne parlait pas beaucoup au début. Prend de plus en plus l'aise et essaie d'aider les autres pendant la présentation.",
+      "RAZAFIMAMY Antonino Iraky Ny Avo": "Parle très fort. Se met en avant et prend toujours les premières initiatives.",
+      "RATOVONJOELY Ny Ando Irintsoa": "Calme, ne parle pas beaucoup. Un peu dans l'ombre d'Amboara."
+    }
+  }
+};
 
 let state = JSON.parse(localStorage.getItem("spoon-state-v2") || "null") || {};
 state = {
@@ -374,14 +443,40 @@ ensureStakeholderAccessCodes();
 const madaCriterionScore = miniCriterionScore;
 const madaReviewsForGroup = group => Object.values(state.madaReviews).filter(review => Number(review.groupId) === Number(group.id));
 const madaProjectScore = review => miniProjectScore(review);
+const madaMentorScoreForGroup = group => madaMentorScoring[Number(group?.id)] || null;
+const madaQuestionScore = group => Number(madaMentorScoreForGroup(group)?.total || 0);
+const madaQuestionScores = group => madaMentorScoreForGroup(group)?.questionScores || [];
+function madaMentorFeedbackForPerson(person) {
+  const direct = Object.values(madaMentorScoring)
+    .map(score => score.individualFeedback?.[person])
+    .find(Boolean);
+  if (direct) return direct;
+  const personKey = normalizeCsvName(person);
+  for (const score of Object.values(madaMentorScoring)) {
+    const match = Object.entries(score.individualFeedback || {})
+      .find(([name]) => normalizeCsvName(name) === personKey);
+    if (match) return match[1];
+  }
+  return "";
+}
 const madaGroupAverage = group => {
   const reviews = madaReviewsForGroup(group);
   if (!reviews.length) return 0;
   return Math.round((reviews.reduce((sum, review) => sum + madaProjectScore(review), 0) / reviews.length) * 10) / 10;
 };
+const madaCombinedScore = group => Math.round((madaQuestionScore(group) + madaGroupAverage(group)) * 10) / 10;
 const madaScoreboard = () => madaGroups()
-  .map(group => ({ group, average: madaGroupAverage(group), max: madaProjectTotal, juryCount: madaReviewsForGroup(group).length }))
-  .sort((a, b) => b.average - a.average);
+  .map(group => ({
+    group,
+    total: madaCombinedScore(group),
+    questionScore: madaQuestionScore(group),
+    miniScore: madaGroupAverage(group),
+    max: madaCombinedTotal,
+    questionMax: madaQuestionTotal,
+    miniMax: madaProjectTotal,
+    juryCount: madaReviewsForGroup(group).length
+  }))
+  .sort((a, b) => b.total - a.total);
 
 const answerGuides = {
   1: {
@@ -3365,8 +3460,9 @@ function participantStakeholderFeedback(person, group) {
 // jury notes and silently dropped admin feedback from what the AI saw.
 function participantMadaStakeholderFeedback(person) {
   const adminNotes = participantAdminNotes("madagascar", person).map(item => `Admin: ${item.note}`);
+  const mentorNote = madaMentorFeedbackForPerson(person);
   const miniNotes = participantMadaNotes(person).map(item => `${item.jury}: ${item.note}`);
-  const notes = [...adminNotes, ...miniNotes];
+  const notes = [mentorNote ? `Mentor Q1-Q10: ${mentorNote}` : "", ...adminNotes, ...miniNotes].filter(Boolean);
   return notes.length ? notes.join(" · ") : "No individual stakeholder feedback yet.";
 }
 
@@ -3434,9 +3530,10 @@ function usefulFeedbackSummary(person, group) {
 
 function usefulMadaFeedbackSummary(person, group) {
   const adminNotes = participantAdminNotes("madagascar", person).map(item => item.note);
-  const notes = [...adminNotes, ...participantMadaNotes(person).map(item => item.note)].filter(Boolean);
+  const mentorNote = madaMentorFeedbackForPerson(person);
+  const notes = [mentorNote, ...adminNotes, ...participantMadaNotes(person).map(item => item.note)].filter(Boolean);
   const evidence = polishFallbackFeedback(notes.slice(0, 2).join(" "));
-  if (!notes.length) return `${person} does not yet have individual feedback saved; the available context is group-level only, with ${group.name} having a mini-project average of ${madaGroupAverage(group)}/${madaProjectTotal}.`;
+  if (!notes.length) return `${person} does not yet have individual feedback saved; the available context is group-level only, with ${group.name} scoring ${madaCombinedScore(group)}/${madaCombinedTotal} total.`;
   return `${person}: ${evidence}`;
 }
 
@@ -3458,6 +3555,7 @@ function fallbackStakeholderPersonSummary(person, group, isMada) {
 }
 
 function stakeholderPersonSummary(eventKey, person, group, isMada) {
+  if (isMada) return fallbackStakeholderPersonSummary(person, group, isMada);
   const aiSummary = state.stakeholderPersonSummaries?.[stakeholderPersonSummaryKey(eventKey, person)];
   // Some cached AI summaries were generated before individual/admin notes existed (or, for
   // Madagascar, before the AI payload included admin notes at all) and are stuck saying there
@@ -3480,13 +3578,13 @@ function stakeholderWinnerView(eventKey, rows) {
 function stakeholderOfficeWinnersView(rows) {
   // Offices (Diego, Fina, Tana) are a Madagascar-only concept, so this table only makes sense
   // on the Madagascar stakeholder dashboard. `rows` is madaScoreboard()'s output, already sorted
-  // descending by average — filtering by office preserves that order, so the first match per
+  // descending by total score — filtering by office preserves that order, so the first match per
   // office is that office's current leader.
   const winners = madaOffices.map(office => {
     const officeRows = rows.filter(row => (row.group.office || madaOffices[0]) === office);
     return { office, winner: officeRows[0], groupCount: officeRows.length };
   });
-  return `<article class="card report-card stakeholder-office-winners-section" id="stakeholder-office-winners"><div class="report-heading"><div><p class="eyebrow">Per-office results</p><h2>Group winner per office</h2><p class="subtle">The top-scoring group in each office, based on the current mini-project average.</p></div><span class="ai-badge">${madaOffices.length} offices</span></div><div class="stakeholder-table-wrap"><table class="stakeholder-individual-table"><thead><tr><th>Office</th><th>Winning group</th><th>Score</th><th>Jury reviews</th></tr></thead><tbody>${winners.map(({ office, winner, groupCount }) => `<tr><td data-label="Office"><strong>${esc(office)}</strong><small>${groupCount} group${groupCount === 1 ? "" : "s"}</small></td><td data-label="Winning group">${winner && winner.average > 0 ? esc(winner.group.name) : "No scores yet"}</td><td data-label="Score">${winner ? `${winner.average}/${winner.max}` : "—"}</td><td data-label="Jury reviews">${winner ? winner.juryCount : 0}</td></tr>`).join("")}</tbody></table></div></article>`;
+  return `<article class="card report-card stakeholder-office-winners-section" id="stakeholder-office-winners"><div class="report-heading"><div><p class="eyebrow">Per-office results</p><h2>Group winner per office</h2><p class="subtle">The top-scoring group in each office, using Q1-Q10 plus mini-project points.</p></div><span class="ai-badge">${madaOffices.length} offices</span></div><div class="stakeholder-table-wrap"><table class="stakeholder-individual-table"><thead><tr><th>Office</th><th>Winning group</th><th>Total</th><th>Breakdown</th></tr></thead><tbody>${winners.map(({ office, winner, groupCount }) => `<tr><td data-label="Office"><strong>${esc(office)}</strong><small>${groupCount} group${groupCount === 1 ? "" : "s"}</small></td><td data-label="Winning group">${winner && winner.total > 0 ? esc(winner.group.name) : "No scores yet"}</td><td data-label="Total">${winner ? `${winner.total}/${winner.max}` : "—"}</td><td data-label="Breakdown">${winner ? `Q1-Q10 ${winner.questionScore}/${winner.questionMax} · Mini ${winner.miniScore}/${winner.miniMax}` : "—"}</td></tr>`).join("")}</tbody></table></div></article>`;
 }
 
 function stakeholderMetricStrip(metrics) {
@@ -3716,16 +3814,17 @@ function stakeholderNewbieDetails(person, group) {
 function stakeholderMadaNewbieDetails(person, group) {
   const adminNotes = participantAdminNotes("madagascar", person);
   const notes = participantMadaNotes(person);
-  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${notes.length ? `<h4>Jury mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
+  const mentorFeedback = madaMentorFeedbackForPerson(person);
+  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${mentorFeedback ? `<h4>Mentor Q1-Q10 feedback</h4><p>${esc(mentorFeedback)}</p>` : ""}${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${notes.length ? `<h4>Jury mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
 }
 
 function stakeholderIndividualRow(person, group, isMada, eventKey) {
   const summary = stakeholderPersonSummary(eventKey, person, group, isMada);
-  const noteCount = (isMada ? participantMadaNotes(person).length : participantQuestionNotes(person, group).length + participantMiniNotes(person, group).length) + participantAdminNotes(isMada ? "madagascar" : "mauritius", person).length;
-  const groupScoreCopy = isMada ? `${madaGroupAverage(group)}/${madaProjectTotal}` : `${groupScore(group)}/${knownTotalMarks()}`;
+  const noteCount = (isMada ? participantMadaNotes(person).length + (madaMentorFeedbackForPerson(person) ? 1 : 0) : participantQuestionNotes(person, group).length + participantMiniNotes(person, group).length) + participantAdminNotes(isMada ? "madagascar" : "mauritius", person).length;
+  const groupScoreCopy = isMada ? `${madaQuestionScore(group)}/${madaQuestionTotal}` : `${groupScore(group)}/${knownTotalMarks()}`;
   const miniCopy = isMada ? `${madaGroupAverage(group)}/${madaProjectTotal}` : `${miniProjectAverage(group)}/${miniProjectTotal}`;
   const pointsCopy = isMada
-    ? `<strong>${esc(groupScoreCopy)}</strong><small>Group mini-project average</small>`
+    ? `<strong>${esc(madaCombinedScore(group))}/${madaCombinedTotal}</strong><small>Total</small><strong>${esc(groupScoreCopy)}</strong><small>Q1-Q10</small><strong>${esc(miniCopy)}</strong><small>Mini-project</small>`
     : `<strong>${esc(groupScoreCopy)}</strong><small>Questions</small><strong>${esc(miniCopy)}</strong><small>Mini-project</small>`;
   const extraGroupCopy = isMada ? `Office: ${group.office || "—"}` : `${completedQuestionFeedback(group).length}/${state.data.questions.length} questions complete`;
   return `<tr><td data-label="Newbie">${participantNameBlock(person, "stakeholder", true)}<small>${esc(noteCount)} note${noteCount === 1 ? "" : "s"}</small></td><td data-label="Choices">${stakeholderChoicePills(eventKey, person)}</td><td data-label="One-on-one interview">${stakeholderInterviewPreview(eventKey, person)}</td><td data-label="Summary"><p class="stakeholder-ai-summary">${esc(summary)}</p></td><td data-label="Group"><strong>${esc(group.name)}</strong><small>${esc(extraGroupCopy)}</small></td><td data-label="Points" class="stakeholder-points-cell">${pointsCopy}</td><td data-label="Further info">${isMada ? stakeholderMadaNewbieDetails(person, group) : stakeholderNewbieDetails(person, group)}</td></tr>`;
@@ -3750,6 +3849,8 @@ function stakeholderPayload(eventKey) {
       groups: madaGroups().map(group => ({
         group: group.name,
         office: group.office || "",
+        questionScore: `${madaQuestionScore(group)}/${madaQuestionTotal}`,
+        totalScore: `${madaCombinedScore(group)}/${madaCombinedTotal}`,
         miniProjectAverage: `${madaGroupAverage(group)}/${madaProjectTotal}`,
         miniProjectSummary: buildMadaGroupSummary(group),
         participants: group.participants.map(person => ({
@@ -4001,7 +4102,10 @@ function stakeholderDashboard(eventKey) {
   const winnerView = stakeholderWinnerView(eventKey, rows);
   const officeWinnersView = isMada ? stakeholderOfficeWinnersView(rows) : "";
   const cards = isMada
-    ? madaGroups().map(group => `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office || "")}</p><h2>Group and work context</h2></div><span class="ai-badge">${madaGroupAverage(group)}/${madaProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${madaGroupAverage(group)}/${madaProjectTotal}`, label: "Mini-project average" }, { value: String(madaReviewsForGroup(group).length), label: "Jury reviews" }, { value: String(group.participants.length), label: "Newbies" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildMadaGroupSummary(group))}</p>${stakeholderMadaScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${madaProjectBreakdownView(group)}</details></article>`).join("")
+    ? madaGroups().map(group => {
+      const mentor = madaMentorScoreForGroup(group);
+      return `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office || "")}</p><h2>Group and work context</h2></div><span class="ai-badge">${madaCombinedScore(group)}/${madaCombinedTotal}</span></div>${stakeholderMetricStrip([{ value: `${madaCombinedScore(group)}/${madaCombinedTotal}`, label: "Total points" }, { value: `${madaQuestionScore(group)}/${madaQuestionTotal}`, label: "Q1-Q10 mentor score" }, { value: `${madaGroupAverage(group)}/${madaProjectTotal}`, label: "Mini-project average" }, { value: String(group.participants.length), label: "Newbies" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildMadaGroupSummary(group))}</p>${mentor ? `<details class="stakeholder-detail-block"><summary>Q1-Q10 score detail</summary><div class="stakeholder-score-pills">${madaQuestionScores(group).map((score, index) => `<span>Q${index + 1}: ${esc(score)}</span>`).join("")}</div><p class="summary-text">${esc(mentor.groupFeedback || "No group mentor feedback.")}</p></details>` : ""}${stakeholderMadaScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${madaProjectBreakdownView(group)}</details></article>`;
+    }).join("")
     : state.data.groups.map(group => {
       const completed = completedQuestionFeedback(group);
       const total = groupScore(group) + miniProjectAverage(group);
@@ -4128,32 +4232,35 @@ function adminTablePage() {
 function buildMadaGroupSummary(group) {
   const reviews = madaReviewsForGroup(group);
   const topic = madaTopicForGroup(group);
+  const mentor = madaMentorScoreForGroup(group);
   const topicCopy = topic ? `Project: ${madaTopicFullTitle(topic)}. ` : "";
-  if (!reviews.length) return `${topicCopy}No Spoon Madagascar jury feedback has been submitted yet.`;
+  const mentorCopy = mentor ? `Q1-Q10 mentor score: ${mentor.total}/${madaQuestionTotal} with ${mentor.lead} as lead. ${mentor.groupFeedback || ""}` : "No Q1-Q10 mentor score is available.";
+  if (!reviews.length) return `${topicCopy}${mentorCopy} Mini-project jury feedback has not been submitted yet. Total so far: ${madaCombinedScore(group)}/${madaCombinedTotal}.`;
   const average = madaGroupAverage(group);
   const juryDetails = reviews
     .slice()
     .sort((a, b) => String(a.juryName).localeCompare(String(b.juryName)))
     .map(review => `${esc(madaFirstName(review.juryName || "Jury"))}: ${madaProjectScore(review)}/${madaProjectTotal}${review.groupNote ? ` — ${review.groupNote}` : ""}`);
-  return `${topicCopy}Average score: ${average}/${madaProjectTotal} from ${reviews.length} jury member(s). ${juryDetails.join(" · ")}`;
+  return `${topicCopy}Total score: ${madaCombinedScore(group)}/${madaCombinedTotal}. ${mentorCopy} Mini-project average: ${average}/${madaProjectTotal} from ${reviews.length} jury member(s). ${juryDetails.join(" · ")}`;
 }
 
 function buildMadaPersonFeedback(person) {
   const adminNotes = participantAdminNotes("madagascar", person);
+  const mentorFeedback = madaMentorFeedbackForPerson(person);
   const notes = Object.values(state.madaReviews)
     .filter(review => review.individualNotes?.[person]?.trim())
     .map(review => ({ jury: review.juryName || "Jury", text: review.individualNotes[person] }));
-  if (!adminNotes.length && !notes.length) return "No individual feedback has been submitted yet.";
+  if (!adminNotes.length && !notes.length && !mentorFeedback) return "No individual feedback has been submitted yet.";
+  const mentorCopy = mentorFeedback ? `Mentor Q1-Q10 feedback: ${mentorFeedback}` : "";
   const adminCopy = adminNotes.length ? `Admin feedback: ${adminNotes.map(item => item.note).join(" · ")}` : "";
   const juryCopy = notes.length ? `${notes.length} jury note(s): ${notes.slice(0, 3).map(item => `${madaFirstName(item.jury)}: ${item.text}`).join(" · ")}` : "No jury individual notes.";
-  return [adminCopy, juryCopy].filter(Boolean).join(" ");
+  return [mentorCopy, adminCopy, juryCopy].filter(Boolean).join(" ");
 }
 
 function madaDetailedGroupCardsView() {
   return madaGroups().map(group => {
     const topic = madaTopicForGroup(group);
-    const average = madaGroupAverage(group);
-    return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office)}</p><h2>Group summary</h2>${topic ? `<p class="subtle">${esc(madaTopicFullTitle(topic))}</p>` : ""}</div><span class="ai-badge">${average}/${madaProjectTotal}</span></div><p class="summary-text">${esc(state.reports[`mada-group|${group.id}`] || buildMadaGroupSummary(group))}</p><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(state.reports[`mada-person|${person}`] || buildMadaPersonFeedback(person))}</p></div>`).join("")}</div></article>`;
+    return `<article class="card report-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office)}</p><h2>Group summary</h2>${topic ? `<p class="subtle">${esc(madaTopicFullTitle(topic))}</p>` : ""}</div><span class="ai-badge">${madaCombinedScore(group)}/${madaCombinedTotal}</span></div>${stakeholderMetricStrip([{ value: `${madaQuestionScore(group)}/${madaQuestionTotal}`, label: "Q1-Q10 mentor score" }, { value: `${madaGroupAverage(group)}/${madaProjectTotal}`, label: "Mini-project average" }, { value: `${madaCombinedScore(group)}/${madaCombinedTotal}`, label: "Total points" }, { value: String(madaReviewsForGroup(group).length), label: "Jury reviews" }])}<p class="summary-text">${esc(buildMadaGroupSummary(group))}</p><h3>Individual feedback</h3><div class="individual-grid">${group.participants.map(person => `<div class="feedback-tile">${participantNameBlock(person)}<p>${esc(buildMadaPersonFeedback(person))}</p></div>`).join("")}</div></article>`;
   }).join("");
 }
 
@@ -4190,7 +4297,7 @@ function madaAdminPage() {
   const scoreRows = madaScoreboard();
   const leader = scoreRows[0];
   const generatedCount = Object.keys(state.reports).filter(key => key.startsWith("mada-group|") || key.startsWith("mada-person|")).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${adminIndividualFeedbackView("madagascar")}${stakeholderPrivateDataAdminView("madagascar")}${stakeholderAccessAdminView("madagascar")}${aiUsageSummaryView("madagascar")}${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaCombinedTotal}</strong><span>Total marks: Q1-Q10 + mini-project</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaCombinedTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.total > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>Q1-Q10 ${row.questionScore}/${row.questionMax} · Mini ${row.miniScore}/${row.miniMax}</small><meter min="0" max="${row.max || 1}" value="${row.total}"></meter><b>${row.total}/${row.max}</b></div>`).join("")}</div></article>${adminIndividualFeedbackView("madagascar")}${stakeholderPrivateDataAdminView("madagascar")}${stakeholderAccessAdminView("madagascar")}${aiUsageSummaryView("madagascar")}${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
 }
 
 function buildPersonFeedback(person) {
