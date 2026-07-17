@@ -1088,6 +1088,17 @@ function removeAdminIndividualFeedbackRow(row) {
   delete state.adminIndividualFeedback[adminFeedbackKey(row.event_key || "mauritius", row.participant_name)];
 }
 
+function applyStakeholderAISummaryRow(row) {
+  if (!row?.event_key) return;
+  const eventKey = row.event_key;
+  if (row.overall_summary) state.stakeholderSummaries[eventKey] = row.overall_summary;
+  Object.entries(row.person_summaries || {}).forEach(([person, content]) => {
+    const value = String(content || "").trim();
+    if (value) state.stakeholderPersonSummaries[stakeholderPersonSummaryKey(eventKey, person)] = value;
+  });
+  if (Object.keys(row.person_summaries || {}).length) state.stakeholderSummaryStatus[eventKey] = "cached";
+}
+
 function applyMiniProjectReviewRow(row) {
   if (!row) return;
   state.miniProjectReviews[miniReviewKey(row.group_id, row.jury_name)] = {
@@ -1982,7 +1993,7 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, stakeholderCodesResult, eventGroupsResult, projectAssignments, corrections, remarks, adminFeedback, miniReviews, photoRecords, reports, aiUsage, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
+    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, stakeholderCodesResult, eventGroupsResult, projectAssignments, corrections, remarks, adminFeedback, stakeholderAISummaries, miniReviews, photoRecords, reports, aiUsage, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       includeAdminData ? supabaseClient.from("mentor_access_codes").select("*").order("mentor_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("juries").select("*").order("name", { ascending: true }),
@@ -1994,6 +2005,7 @@ async function loadSharedData(options = {}) {
       supabaseClient.from("group_corrections").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("individual_remarks").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("admin_individual_feedback").select("*").order("updated_at", { ascending: false }),
+      supabaseClient.from("stakeholder_ai_summaries").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("mini_project_reviews").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("newbie_photos").select("*").order("updated_at", { ascending: false }),
       includeAdminData ? supabaseClient.from("ai_reports").select("*").order("generated_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
@@ -2010,6 +2022,7 @@ async function loadSharedData(options = {}) {
     if (projectAssignments.error) console.warn("Could not load mini_project_assignments table. Run the topic assignment SQL setup when ready.", projectAssignments.error);
     if (miniReviews.error) console.warn("Could not load mini_project_reviews table. Run the mini project SQL setup when ready.", miniReviews.error);
     if (adminFeedback.error) console.warn("Could not load admin_individual_feedback table. Run the latest setup script to let admins add stakeholder notes.", adminFeedback.error);
+    if (stakeholderAISummaries.error) console.warn("Could not load stakeholder_ai_summaries table. Run the latest setup script to show saved stakeholder summaries.", stakeholderAISummaries.error);
     if (photoRecords.error) console.warn("Could not load newbie_photos table. Run the photo SQL setup when ready.", photoRecords.error);
     if (includeAdminData && aiUsage.error) console.warn("Could not load ai_usage_events table. Run the latest setup script to show AI usage.", aiUsage.error);
     state.mentorCodeSetupMissing = includeAdminData && Boolean(mentorCodesResult.error);
@@ -2048,6 +2061,7 @@ async function loadSharedData(options = {}) {
     corrections.data.forEach(applyGroupCorrectionRow);
     remarks.data.forEach(applyIndividualRemarkRow);
     if (!adminFeedback.error) adminFeedback.data.forEach(applyAdminIndividualFeedbackRow);
+    if (!stakeholderAISummaries.error) stakeholderAISummaries.data.forEach(applyStakeholderAISummaryRow);
     if (!projectAssignments.error) projectAssignments.data.forEach(applyMiniProjectAssignmentRow);
     if (!miniReviews.error) miniReviews.data.forEach(applyMiniProjectReviewRow);
     if (!madaAssignments.error) madaAssignments.data.forEach(applyMadaAssignmentRow);
@@ -2131,6 +2145,11 @@ function subscribeSharedData() {
     .on("postgres_changes", { event: "*", schema: "public", table: "admin_individual_feedback" }, payload => {
       if (payload.eventType === "DELETE") removeAdminIndividualFeedbackRow(payload.old);
       else applyAdminIndividualFeedbackRow(payload.new);
+      scheduleRefresh();
+      scheduleMadaRefresh();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "stakeholder_ai_summaries" }, payload => {
+      if (payload.eventType !== "DELETE") applyStakeholderAISummaryRow(payload.new);
       scheduleRefresh();
       scheduleMadaRefresh();
     })
@@ -3290,10 +3309,8 @@ function fallbackStakeholderPersonSummary(person, group, isMada) {
 
 function stakeholderPersonSummary(eventKey, person, group, isMada) {
   const aiSummary = state.stakeholderPersonSummaries?.[stakeholderPersonSummaryKey(eventKey, person)];
-  if (aiSummary) return aiSummary;
+  if (aiSummary && !String(aiSummary).toLowerCase().includes("available individual feedback indicates")) return aiSummary;
 
-  const status = state.stakeholderSummaryStatus?.[eventKey] || "local";
-  if (status === "loading") return "AI summary is being generated.";
   return fallbackStakeholderPersonSummary(person, group, isMada);
 }
 
@@ -3354,9 +3371,9 @@ function stakeholderIndividualDashboard(eventKey) {
     ? madaGroups().flatMap(group => group.participants.map(person => ({ group, person })))
     : state.data.groups.flatMap(group => group.participants.map(person => ({ group, person })));
   const status = state.stakeholderSummaryStatus?.[eventKey] || "local";
-  const badge = status === "loading" ? "AI refreshing" : status === "ready" ? "AI summaries" : status === "cached" ? "Saved AI summaries" : status === "error" ? "AI unavailable" : "Local fallback";
+  const badge = status === "loading" ? "Refreshing" : status === "ready" ? "Summaries" : status === "cached" ? "Saved summaries" : status === "error" ? "Saved/local info" : "Local info";
   const errorCopy = state.stakeholderSummaryError?.[eventKey] || "Check the Edge Function deploy, Gemini secret, and Supabase SQL setup.";
-  const statusCopy = status === "error" ? `<p class="notice compact-notice">AI summary could not load: ${esc(errorCopy)} Showing available saved/local information.</p>` : "";
+  const statusCopy = status === "error" ? `<p class="notice compact-notice">Showing available saved/local information. ${esc(errorCopy)}</p>` : "";
   return `<section class="card report-card stakeholder-individual-section" id="stakeholder-individual"><div class="report-heading"><div><p class="eyebrow">Individual dashboard</p><h2>Newbie feedback summaries</h2><p class="subtle">Built like a full table view: scan each newbie, then open details only when needed.</p></div><span class="ai-badge">${esc(badge)}</span></div>${statusCopy}<div class="stakeholder-table-wrap"><table class="stakeholder-individual-table"><thead><tr><th>Newbie</th><th>Summary</th><th>Group</th><th>${isMada ? "Group points" : "Question points"}</th><th>Mini-project</th><th>Further info</th></tr></thead><tbody>${people.map(({ group, person }) => stakeholderIndividualRow(person, group, isMada, eventKey)).join("")}</tbody></table></div></section>`;
 }
 
@@ -3414,12 +3431,20 @@ async function generateStakeholderOpinion(eventKey) {
   let summary = "";
   let personSummaries = {};
 
-  if (remoteEnabled() && supabaseClient.functions?.invoke) {
+  if (remoteEnabled()) {
     const accessCode = state.stakeholderAccessCode?.[eventKey] || state.stakeholderAccessCodes?.[eventKey]?.code || "";
-    const { data, error } = await supabaseClient.functions.invoke("stakeholder-summary", {
-      body: { eventKey, accessCode, dashboard }
+    if (!accessCode) throw new Error("Missing stakeholder access code. Open the stakeholder link from admin or enter the stakeholder code first.");
+    const response = await fetch(`${cfg.supabaseUrl}/functions/v1/stakeholder-summary`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": cfg.supabaseAnonKey,
+        "Authorization": `Bearer ${cfg.supabaseAnonKey}`
+      },
+      body: JSON.stringify({ eventKey, accessCode, dashboard })
     });
-    if (error) throw error;
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || data?.message || `AI function failed with status ${response.status}.`);
     summary = data?.summary || "";
     personSummaries = data?.personSummaries || {};
     if (data?.cached) state.stakeholderSummaryStatus[eventKey] = "cached";
@@ -3477,6 +3502,7 @@ function queueStakeholderAISummary(eventKey) {
       state.stakeholderSummaryStatus[eventKey] = hasStakeholderAISummaries(eventKey) ? "cached" : "error";
       state.stakeholderSummaryError[eventKey] = friendlyError(error, error?.message || "AI request failed.");
       saveLocal();
+      if (location.hash === "#stakeholder" && state.session?.eventKey === eventKey) stakeholderDashboard(eventKey);
     } finally {
       stakeholderAIInFlight[eventKey] = false;
     }
@@ -4478,13 +4504,18 @@ document.addEventListener("click", async event => {
   if (button.dataset.action === "stakeholder-summary") {
     const eventKey = button.dataset.eventKey || "mauritius";
     try {
+      clearStakeholderAISummaries(eventKey);
       showToast(remoteEnabled() ? "Generating AI summary..." : "Generating local stakeholder summary...");
       await generateStakeholderOpinion(eventKey);
       stakeholderDashboard(eventKey);
       showToast("✓ Stakeholder opinion ready");
     } catch (error) {
       console.error("Stakeholder summary failed", error);
-      showToast(friendlyError(error, "Could not generate the stakeholder opinion."));
+      state.stakeholderSummaryStatus[eventKey] = "error";
+      state.stakeholderSummaryError[eventKey] = error?.message || "AI request failed.";
+      saveLocal();
+      stakeholderDashboard(eventKey);
+      showToast(friendlyError(error, error?.message || "Could not generate the stakeholder opinion."));
     }
     return;
   }
@@ -4500,7 +4531,12 @@ document.addEventListener("click", async event => {
       else adminDashboard(lastAdminMentor);
     } catch (error) {
       console.error("Admin stakeholder summary failed", error);
-      showToast(friendlyError(error, "Could not generate stakeholder AI summary. Check the Edge Function and secrets."));
+      state.stakeholderSummaryStatus[eventKey] = "error";
+      state.stakeholderSummaryError[eventKey] = error?.message || "AI request failed.";
+      saveLocal();
+      if (eventKey === "madagascar") madaAdminPage();
+      else adminDashboard(lastAdminMentor);
+      showToast(friendlyError(error, error?.message || "Could not generate stakeholder AI summary. Check the Edge Function and secrets."));
     }
     return;
   }
