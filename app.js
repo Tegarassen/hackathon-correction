@@ -3655,7 +3655,7 @@ function stakeholderInterviewPreview(eventKey, person) {
   const firstInterview = stakeholderSheetField(row, "Feedback first interview");
   const comments = stakeholderSheetField(row, "Comments");
   const dissertation = stakeholderSheetField(row, "University_Dissertation");
-  return `<div class="stakeholder-interview-preview"><p>${esc(summary)}</p><details class="inline-detail"><summary>Additional details</summary><div>${comments ? `<h4>Stakeholder comments</h4><p>${esc(comments)}</p>` : ""}${firstInterview ? `<h4>First interview feedback</h4><p>${esc(firstInterview)}</p>` : ""}${dissertation ? `<h4>University / dissertation</h4><p>${esc(dissertation)}</p>` : ""}${stakeholderChoiceList(eventKey, person).length ? `<h4>Choices</h4>${stakeholderChoicePills(eventKey, person)}` : ""}</div></details></div>`;
+  return `<div class="stakeholder-interview-preview"><p>${esc(summary)}</p>${firstInterview ? `<details class="inline-detail"><summary>First interview feedback</summary><div><p>${esc(firstInterview)}</p></div></details>` : ""}<details class="inline-detail"><summary>One-on-one details</summary><div>${comments ? `<h4>Stakeholder comments</h4><p>${esc(comments)}</p>` : ""}${dissertation ? `<h4>University / dissertation</h4><p>${esc(dissertation)}</p>` : ""}${stakeholderChoiceList(eventKey, person).length ? `<h4>Choices</h4>${stakeholderChoicePills(eventKey, person)}` : ""}</div></details></div>`;
 }
 
 function stakeholderPrivateRowHasContent(row) {
