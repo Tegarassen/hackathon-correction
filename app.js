@@ -875,20 +875,25 @@ const normalizePhotoName = value => String(value || "")
   .replace(/\.[^.]+$/g, "")
   .replace(/[^a-z0-9]+/gi, "")
   .toLowerCase();
+const participantDisplayNames = {
+  "Hiresha Rakissoon": "Hiresha Ramkisson"
+};
+const displayParticipantName = person => participantDisplayNames[person] || person;
 const initials = name => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
 const photoFor = person => state.photoUrls?.[person] || "";
 
 function participantAvatar(person, size = "small", clickable = true) {
   const url = photoFor(person);
+  const displayName = displayParticipantName(person);
   return url
     ? clickable
-      ? `<button type="button" class="photo-open" data-photo-url="${esc(url)}" data-photo-name="${esc(person)}" title="Open ${esc(person)} photo"><img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false"></button>`
-      : `<img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false">`
-    : `<span class="participant-photo placeholder ${size}">${esc(initials(person))}</span>`;
+      ? `<button type="button" class="photo-open" data-photo-url="${esc(url)}" data-photo-name="${esc(displayName)}" title="Open ${esc(displayName)} photo"><img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(displayName)}" draggable="false" oncontextmenu="return false"></button>`
+      : `<img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(displayName)}" draggable="false" oncontextmenu="return false">`
+    : `<span class="participant-photo placeholder ${size}">${esc(initials(displayName))}</span>`;
 }
 
 function participantNameBlock(person, size = "small", clickablePhoto = true) {
-  return `<span class="participant-name-block">${participantAvatar(person, size, clickablePhoto)}<span>${esc(person)}</span></span>`;
+  return `<span class="participant-name-block">${participantAvatar(person, size, clickablePhoto)}<span>${esc(displayParticipantName(person))}</span></span>`;
 }
 
 function matchParticipantFromFile(file) {
@@ -2875,6 +2880,7 @@ function stakeholderPrivatePayloadFromForm(eventKey, data) {
       const sheetData = {
         NAME: firstName,
         SURNAME: surname,
+        "Stakeholder summary": String(data[`private::${person}::Stakeholder summary`] || "").trim(),
         "Feedback first interview": String(data[`private::${person}::Feedback first interview`] || "").trim(),
         University_Dissertation: String(data[`private::${person}::University_Dissertation`] || "").trim(),
         Comments: String(data[`private::${person}::Comments`] || "").trim(),
@@ -2882,6 +2888,7 @@ function stakeholderPrivatePayloadFromForm(eventKey, data) {
         "Choice 2": String(data[`private::${person}::Choice 2`] || "").trim(),
         "Choice 3": String(data[`private::${person}::Choice 3`] || "").trim()
       };
+      sheetData["Stakeholder summary"] = stakeholderInterviewSummaryFromData(sheetData);
       const hasPrivateData = ["Feedback first interview", "University_Dissertation", "Comments", "Choice 1", "Choice 2", "Choice 3"].some(field => sheetData[field]);
       const key = stakeholderPrivateDataKey(eventKey, person);
 
@@ -3527,6 +3534,42 @@ function parseCsv(text) {
   return body.map(item => Object.fromEntries(cleanHeaders.map((header, index) => [header, String(item[index] || "").trim()])));
 }
 
+function compactText(value, max = 520) {
+  const text = String(value || "")
+    .replace(/Interview Summary:/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= max) return text;
+  const clipped = text.slice(0, max).replace(/\s+\S*$/, "").trim();
+  return `${clipped}.`;
+}
+
+function stakeholderInterviewSummaryFromData(sheet = {}) {
+  const comments = compactText(sheet.Comments, 280);
+  const dissertation = compactText(sheet.University_Dissertation, 150);
+  const source = comments.toLowerCase();
+  const strengths = [];
+  const cautions = [];
+
+  if (/communicat|fluent|speak|présent|present/.test(source)) strengths.push("communicates well");
+  if (/technical|coding|programming|developer|oop|sql|data|ai|apex|react|java/.test(source)) strengths.push("has a technical foundation");
+  if (/learn|curious|motivated|attitude|willing|challenge|eager/.test(source)) strengths.push("shows a strong learning attitude");
+  if (/team|lead|leader|collaboration/.test(source)) strengths.push("can contribute well in a team");
+  if (/confident|composure|at ease/.test(source)) strengths.push("presents with confidence");
+
+  if (/weak|unclear|improve|stressed|stress|basic|not good|failed/.test(source)) cautions.push("may need support to strengthen consistency and confidence");
+  if (/communication moyenne|communication ok|need to improve in french|french.*3\/5/.test(source)) cautions.push("communication can be developed further");
+  if (/frontend|front-end|front end/.test(source) && /weak|didn.t like|not like/.test(source)) cautions.push("front-end work may not be their strongest area");
+
+  const profile = strengths.length
+    ? `${[...new Set(strengths)].slice(0, 3).join(", ")}.`
+    : comments || "The stakeholder one-on-one notes give a limited profile, but useful placement information is available.";
+  const caution = cautions.length ? ` ${[...new Set(cautions)].slice(0, 2).join(" and ")}.` : "";
+  const dissertationCopy = dissertation ? ` Project/dissertation: ${dissertation}.` : "";
+
+  return compactText(`${profile}${caution}${dissertationCopy}`, 520);
+}
+
 function stakeholderCsvPersonMap(eventKey) {
   const groups = eventKey === "madagascar" ? madaGroups() : state.data.groups;
   const map = new Map();
@@ -3566,6 +3609,17 @@ function applyStakeholderCsvToForm(form, rows) {
       const input = form.elements[`private::${person}::${field}`];
       if (input) input.value = row[field] || row[field.replace("_", " ")] || "";
     });
+    const summaryInput = form.elements[`private::${person}::Stakeholder summary`];
+    if (summaryInput) {
+      summaryInput.value = stakeholderInterviewSummaryFromData({
+        "Feedback first interview": row["Feedback first interview"] || "",
+        University_Dissertation: row.University_Dissertation || row["University Dissertation"] || "",
+        Comments: row.Comments || "",
+        "Choice 1": row["Choice 1"] || "",
+        "Choice 2": row["Choice 2"] || "",
+        "Choice 3": row["Choice 3"] || ""
+      });
+    }
   });
 
   return { matched, missing };
@@ -3597,10 +3651,11 @@ function stakeholderChoicePills(eventKey, person) {
 function stakeholderInterviewPreview(eventKey, person) {
   const row = stakeholderPrivateDataFor(eventKey, person);
   if (!stakeholderPrivateRowHasContent(row)) return `<span class="empty-choice">No interview data added</span>`;
+  const summary = stakeholderInterviewSummaryFromData(row.sheetData || {});
   const firstInterview = stakeholderSheetField(row, "Feedback first interview");
   const comments = stakeholderSheetField(row, "Comments");
   const dissertation = stakeholderSheetField(row, "University_Dissertation");
-  return `<div class="stakeholder-interview-preview">${firstInterview ? `<p><b>First interview:</b> ${esc(firstInterview)}</p>` : ""}${comments ? `<p><b>One-on-one comments:</b> ${esc(comments)}</p>` : ""}${dissertation ? `<small><b>University / dissertation:</b> ${esc(dissertation)}</small>` : ""}</div>`;
+  return `<div class="stakeholder-interview-preview"><p>${esc(summary)}</p><details class="inline-detail"><summary>Additional details</summary><div>${comments ? `<h4>Stakeholder comments</h4><p>${esc(comments)}</p>` : ""}${firstInterview ? `<h4>First interview feedback</h4><p>${esc(firstInterview)}</p>` : ""}${dissertation ? `<h4>University / dissertation</h4><p>${esc(dissertation)}</p>` : ""}${stakeholderChoiceList(eventKey, person).length ? `<h4>Choices</h4>${stakeholderChoicePills(eventKey, person)}` : ""}</div></details></div>`;
 }
 
 function stakeholderPrivateRowHasContent(row) {
@@ -3619,7 +3674,7 @@ function stakeholderPrivateSheetView(eventKey) {
     .filter(item => stakeholderPrivateRowHasContent(item.row));
   if (!rows.length) return "";
 
-  return `<section class="card report-card stakeholder-private-section" id="stakeholder-private-sheet"><div class="report-heading"><div><p class="eyebrow">Stakeholder interview data</p><h2>Interview comments and choices</h2><p class="subtle">Sensitive stakeholder sheet information shared through the secure dashboard code.</p></div><span class="ai-badge">${rows.length} row${rows.length === 1 ? "" : "s"}</span></div><div class="stakeholder-table-wrap"><table class="stakeholder-private-table"><thead><tr><th>Newbie</th><th>Feedback first interview</th><th>University / dissertation</th><th>Comments</th><th>Choice 1</th><th>Choice 2</th><th>Choice 3</th></tr></thead><tbody>${rows.map(({ group, person, row }) => `<tr><td data-label="Newbie">${participantNameBlock(person, "small", true)}<small>${esc(group.name)}${group.office ? ` · ${esc(group.office)}` : ""}</small></td><td data-label="Feedback first interview">${esc(stakeholderSheetField(row, "Feedback first interview") || "—")}</td><td data-label="University / dissertation">${esc(stakeholderSheetField(row, "University_Dissertation") || "—")}</td><td data-label="Comments">${esc(stakeholderSheetField(row, "Comments") || "—")}</td><td data-label="Choice 1">${esc(stakeholderSheetField(row, "Choice 1") || "—")}</td><td data-label="Choice 2">${esc(stakeholderSheetField(row, "Choice 2") || "—")}</td><td data-label="Choice 3">${esc(stakeholderSheetField(row, "Choice 3") || "—")}</td></tr>`).join("")}</tbody></table></div></section>`;
+  return `<section class="card report-card stakeholder-private-section" id="stakeholder-private-sheet"><div class="report-heading"><div><p class="eyebrow">Stakeholder interview data</p><h2>Interview comments and choices</h2><p class="subtle">Stakeholder sheet information shared through the secure dashboard code.</p></div><span class="ai-badge">${rows.length} row${rows.length === 1 ? "" : "s"}</span></div><div class="stakeholder-table-wrap"><table class="stakeholder-private-table"><thead><tr><th>Newbie</th><th>Summary</th><th>Feedback first interview</th><th>University / dissertation</th><th>Comments</th><th>Choice 1</th><th>Choice 2</th><th>Choice 3</th></tr></thead><tbody>${rows.map(({ group, person, row }) => `<tr><td data-label="Newbie">${participantNameBlock(person, "small", true)}<small>${esc(group.name)}${group.office ? ` · ${esc(group.office)}` : ""}</small></td><td data-label="Summary">${esc(stakeholderInterviewSummaryFromData(row.sheetData || {}) || "—")}</td><td data-label="Feedback first interview">${esc(stakeholderSheetField(row, "Feedback first interview") || "—")}</td><td data-label="University / dissertation">${esc(stakeholderSheetField(row, "University_Dissertation") || "—")}</td><td data-label="Comments">${esc(stakeholderSheetField(row, "Comments") || "—")}</td><td data-label="Choice 1">${esc(stakeholderSheetField(row, "Choice 1") || "—")}</td><td data-label="Choice 2">${esc(stakeholderSheetField(row, "Choice 2") || "—")}</td><td data-label="Choice 3">${esc(stakeholderSheetField(row, "Choice 3") || "—")}</td></tr>`).join("")}</tbody></table></div></section>`;
 }
 
 function stakeholderNewbieDetails(person, group) {
@@ -3864,6 +3919,7 @@ function stakeholderPrivateDataAdminView(eventKey) {
   const groups = eventKey === "madagascar" ? madaGroups() : state.data.groups;
   const savedCount = groups.reduce((sum, group) => sum + (group.participants || []).filter(person => stakeholderPrivateRowHasContent(stakeholderPrivateDataFor(eventKey, person))).length, 0);
   const fields = [
+    ["Stakeholder summary", "Stakeholder summary", "textarea"],
     ["Feedback first interview", "Feedback first interview", "textarea"],
     ["University_Dissertation", "University / dissertation", "input"],
     ["Comments", "Stakeholder interview comments", "textarea"],

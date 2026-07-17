@@ -602,10 +602,16 @@ img.participant-photo { background:#dceaf2; }
 .stakeholder-choice-pills span { display:inline-flex; align-items:center; gap:6px; padding:6px 9px; border-radius:999px; background:#fff1e8; color:#9e4b18; font-weight:900; }
 .stakeholder-choice-pills b { display:grid; place-items:center; width:18px; height:18px; border-radius:50%; background:#ff9c54; color:white; font-size:11px; }
 .empty-choice { display:inline-flex; color:#8b9aaa; font-size:12px; font-weight:800; }
-.stakeholder-interview-preview { display:grid; gap:7px; min-width:220px; max-width:360px; }
-.stakeholder-interview-preview p { margin:0; color:#40536b; font-weight:650; }
+.stakeholder-interview-preview { display:grid; gap:9px; min-width:220px; max-width:360px; }
+.stakeholder-interview-preview > p { margin:0; color:#40536b; font-weight:750; }
 .stakeholder-interview-preview b { color:#12223a; }
 .stakeholder-interview-preview small { margin:0; color:#607187; line-height:1.45; }
+.inline-detail { margin:0; }
+.inline-detail summary { display:inline-flex; width:max-content; max-width:100%; padding:6px 9px; border-radius:999px; background:#e8f8f6; color:#087c79; font-size:11px; font-weight:900; list-style:none; }
+.inline-detail summary::-webkit-details-marker { display:none; }
+.inline-detail > div { display:grid; gap:8px; margin-top:9px; padding:10px; border:1px solid #e1eaee; border-radius:10px; background:#f8fbfc; }
+.inline-detail h4 { margin:0; color:#12223a; font-size:12px; }
+.inline-detail p { margin:0; color:#526276; font-weight:600; line-height:1.5; }
 .stakeholder-private-section { background:#fbfdfe; border-color:#dce7ec; }
 .stakeholder-private-table { width:100%; min-width:1040px; border-collapse:separate; border-spacing:0; }
 .stakeholder-private-table th { position:sticky; top:0; z-index:1; padding:12px; text-align:left; background:#f0f6f7; color:#12223a; border-bottom:1px solid #dce7ec; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
