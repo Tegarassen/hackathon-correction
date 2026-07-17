@@ -3338,6 +3338,18 @@ function stakeholderWinnerView(eventKey, rows) {
   return `<section class="card report-card stakeholder-winner-card"><div><p class="eyebrow">Hackathon winner</p><h2>${esc(winner.group.name)}</h2><p class="subtle">${esc(stakeholderEventLabel(eventKey))} winner based on the current saved scores.</p></div><span>${esc(score)}</span></section>`;
 }
 
+function stakeholderOfficeWinnersView(rows) {
+  // Offices (Diego, Fina, Tana) are a Madagascar-only concept, so this table only makes sense
+  // on the Madagascar stakeholder dashboard. `rows` is madaScoreboard()'s output, already sorted
+  // descending by average — filtering by office preserves that order, so the first match per
+  // office is that office's current leader.
+  const winners = madaOffices.map(office => {
+    const officeRows = rows.filter(row => (row.group.office || madaOffices[0]) === office);
+    return { office, winner: officeRows[0], groupCount: officeRows.length };
+  });
+  return `<article class="card report-card stakeholder-office-winners-section" id="stakeholder-office-winners"><div class="report-heading"><div><p class="eyebrow">Per-office results</p><h2>Group winner per office</h2><p class="subtle">The top-scoring group in each office, based on the current mini-project average.</p></div><span class="ai-badge">${madaOffices.length} offices</span></div><div class="stakeholder-table-wrap"><table class="stakeholder-individual-table"><thead><tr><th>Office</th><th>Winning group</th><th>Score</th><th>Jury reviews</th></tr></thead><tbody>${winners.map(({ office, winner, groupCount }) => `<tr><td data-label="Office"><strong>${esc(office)}</strong><small>${groupCount} group${groupCount === 1 ? "" : "s"}</small></td><td data-label="Winning group">${winner && winner.average > 0 ? esc(winner.group.name) : "No scores yet"}</td><td data-label="Score">${winner ? `${winner.average}/${winner.max}` : "—"}</td><td data-label="Jury reviews">${winner ? winner.juryCount : 0}</td></tr>`).join("")}</tbody></table></div></article>`;
+}
+
 function stakeholderMetricStrip(metrics) {
   return `<div class="stakeholder-metric-strip">${metrics.map(metric => `<div><strong>${esc(metric.value)}</strong><span>${esc(metric.label)}</span></div>`).join("")}</div>`;
 }
@@ -3595,6 +3607,7 @@ function stakeholderDashboard(eventKey) {
   const rows = isMada ? madaScoreboard() : combinedScoreboard();
   const individualSection = stakeholderIndividualDashboard(eventKey);
   const winnerView = stakeholderWinnerView(eventKey, rows);
+  const officeWinnersView = isMada ? stakeholderOfficeWinnersView(rows) : "";
   const cards = isMada
     ? madaGroups().map(group => `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office || "")}</p><h2>Group and work context</h2></div><span class="ai-badge">${madaGroupAverage(group)}/${madaProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${madaGroupAverage(group)}/${madaProjectTotal}`, label: "Mini-project average" }, { value: String(madaReviewsForGroup(group).length), label: "Jury reviews" }, { value: String(group.participants.length), label: "Newbies" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildMadaGroupSummary(group))}</p>${stakeholderMadaScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${madaProjectBreakdownView(group)}</details></article>`).join("")
     : state.data.groups.map(group => {
@@ -3603,7 +3616,7 @@ function stakeholderDashboard(eventKey) {
       return `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group and work context</h2></div><span class="ai-badge">${total}/${knownTotalMarks() + miniProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${total}/${knownTotalMarks() + miniProjectTotal}`, label: "Overall points" }, { value: `${groupScore(group)}/${knownTotalMarks()}`, label: "Question points" }, { value: `${miniProjectAverage(group)}/${miniProjectTotal}`, label: "Mini-project average" }, { value: `${completed.length}/${state.data.questions.length}`, label: "Completed questions" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildGroupSummary(group))}</p><h3>Completed questions</h3>${stakeholderQuestionPanel(group)}<h3>Mini project</h3>${stakeholderMiniScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${miniProjectBreakdownView(group)}</details></article>`;
     }).join("");
 
-  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions"><button class="secondary" data-scroll-target="stakeholder-individual">Individual table</button><button class="secondary" data-scroll-target="stakeholder-groups">Group details</button><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button></div></section><section class="report-stack">${winnerView}${individualSection}<div id="stakeholder-groups" class="stakeholder-anchor"></div>${cards}</section></main>`);
+  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions">${isMada ? `<button class="secondary" data-scroll-target="stakeholder-office-winners">Office winners</button>` : ""}<button class="secondary" data-scroll-target="stakeholder-individual">Individual table</button><button class="secondary" data-scroll-target="stakeholder-groups">Group details</button><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button></div></section><section class="report-stack">${winnerView}${officeWinnersView}${individualSection}<div id="stakeholder-groups" class="stakeholder-anchor"></div>${cards}</section></main>`);
   queueStakeholderAISummary(eventKey);
 }
 
