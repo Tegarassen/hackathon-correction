@@ -523,6 +523,8 @@ summary { cursor:pointer; font-weight:600; color:#087c79; }
 .pending-mark-box strong { color:#a94613; }
 .pending-mark-box span { color:#7b6559; font-size:13px; }
 .participant-name-block { display:flex; align-items:center; gap:9px; font-weight:800; color:var(--ink); }
+.stakeholder-individual-table .participant-name-block { align-items:flex-start; gap:11px; }
+.stakeholder-individual-table .participant-name-block > span:last-child { display:block; padding-top:4px; font-size:13px; line-height:1.25; }
 .photo-open { display:inline-grid; place-items:center; flex:0 0 auto; border:0; padding:0; border-radius:50%; background:transparent; }
 .photo-open:hover .participant-photo { border-color:var(--orange); transform:scale(1.04); }
 .participant-photo { display:grid; place-items:center; flex:0 0 auto; border-radius:50%; object-fit:cover; border:2px solid #dbe8ed; background:#e2f7f4; color:#087c79; font-weight:900; user-select:none; -webkit-user-drag:none; }
@@ -602,10 +604,17 @@ img.participant-photo { background:#dceaf2; }
 .stakeholder-choice-pills span { display:inline-flex; align-items:center; gap:6px; padding:6px 9px; border-radius:999px; background:#fff1e8; color:#9e4b18; font-weight:900; }
 .stakeholder-choice-pills b { display:grid; place-items:center; width:18px; height:18px; border-radius:50%; background:#ff9c54; color:white; font-size:11px; }
 .empty-choice { display:inline-flex; color:#8b9aaa; font-size:12px; font-weight:800; }
-.stakeholder-interview-preview { display:grid; gap:7px; min-width:220px; max-width:360px; }
-.stakeholder-interview-preview p { margin:0; color:#40536b; font-weight:650; }
+.stakeholder-interview-preview { display:grid; gap:9px; min-width:220px; max-width:360px; }
+.stakeholder-interview-preview > p { margin:0; color:#40536b; font-weight:750; }
 .stakeholder-interview-preview b { color:#12223a; }
 .stakeholder-interview-preview small { margin:0; color:#607187; line-height:1.45; }
+.inline-detail { margin:0; }
+.inline-detail summary { display:inline-flex; width:max-content; max-width:100%; padding:6px 9px; border-radius:999px; background:#e8f8f6; color:#087c79; font-size:11px; font-weight:900; list-style:none; }
+.inline-detail[open] summary { background:#fff1e8; color:#b85720; }
+.inline-detail summary::-webkit-details-marker { display:none; }
+.inline-detail > div { display:grid; gap:8px; margin-top:9px; padding:10px; border:1px solid #e1eaee; border-radius:10px; background:#f8fbfc; }
+.inline-detail h4 { margin:0; color:#12223a; font-size:12px; }
+.inline-detail p { margin:0; color:#526276; font-weight:600; line-height:1.5; }
 .stakeholder-private-section { background:#fbfdfe; border-color:#dce7ec; }
 .stakeholder-private-table { width:100%; min-width:1040px; border-collapse:separate; border-spacing:0; }
 .stakeholder-private-table th { position:sticky; top:0; z-index:1; padding:12px; text-align:left; background:#f0f6f7; color:#12223a; border-bottom:1px solid #dce7ec; font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
@@ -615,10 +624,14 @@ img.participant-photo { background:#dceaf2; }
 .stakeholder-detail-block summary { padding:12px 14px; color:#087c79; }
 .stakeholder-detail-block .mini-jury-breakdown { margin:0 12px 12px; }
 .stakeholder-table-wrap { margin-top:16px; overflow:auto; border:1px solid #dce7ec; border-radius:16px; background:white; }
-.stakeholder-individual-table { width:100%; min-width:1180px; border-collapse:separate; border-spacing:0; }
+.stakeholder-individual-table { width:100%; min-width:1180px; border-collapse:separate; border-spacing:0 10px; }
 .stakeholder-individual-table th { position:sticky; top:0; z-index:1; padding:10px; text-align:left; background:#eaf7f7; color:#12223a; border-bottom:1px solid #dce7ec; font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
-.stakeholder-individual-table td { vertical-align:top; padding:10px; border-bottom:1px solid #e1eaee; color:#526276; font-size:12px; line-height:1.5; }
-.stakeholder-individual-table tr:last-child td { border-bottom:0; }
+.stakeholder-individual-table tbody tr { background:white; box-shadow:0 8px 18px rgba(3,14,29,.07); }
+.stakeholder-individual-table tbody tr:hover { box-shadow:0 12px 26px rgba(3,14,29,.12); }
+.stakeholder-individual-table td { vertical-align:top; padding:13px 10px; border-top:1px solid #e1eaee; border-bottom:1px solid #e1eaee; color:#526276; font-size:12px; line-height:1.5; }
+.stakeholder-individual-table td:first-child { border-left:4px solid var(--green); border-radius:12px 0 0 12px; background:#fbfefe; }
+.stakeholder-individual-table td:last-child { border-right:1px solid #e1eaee; border-radius:0 12px 12px 0; }
+.stakeholder-individual-table tr:last-child td { border-bottom:1px solid #e1eaee; }
 .stakeholder-individual-table td:first-child { min-width:190px; }
 .stakeholder-individual-table td:nth-child(2) { min-width:145px; }
 .stakeholder-individual-table td:nth-child(3) { min-width:240px; }
@@ -656,6 +669,8 @@ img.participant-photo { background:#dceaf2; }
   .stakeholder-individual-table, .stakeholder-individual-table tbody, .stakeholder-individual-table tr, .stakeholder-individual-table td { display:block; width:100%; }
   .stakeholder-individual-table tr { border:1px solid #dce7ec; border-radius:16px; background:white; overflow:hidden; box-shadow:0 8px 20px rgba(3,14,29,.08); }
   .stakeholder-individual-table td { display:grid; grid-template-columns:150px minmax(0,1fr); gap:12px; padding:12px; border-bottom:1px solid #edf2f4; }
+  .stakeholder-individual-table td:first-child { border-left:0; border-radius:0; background:#fbfefe; }
+  .stakeholder-individual-table td:last-child { border-right:0; border-radius:0; }
   .stakeholder-individual-table td:last-child { border-bottom:0; }
   .stakeholder-individual-table td:before { content:attr(data-label); color:#087c79; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.06em; }
   .stakeholder-individual-table td:first-child, .stakeholder-individual-table td:nth-child(2), .stakeholder-individual-table td:nth-child(3), .stakeholder-individual-table td:nth-child(4) { min-width:0; }
