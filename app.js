@@ -3681,27 +3681,13 @@ function stakeholderNewbieDetails(person, group) {
   const adminNotes = participantAdminNotes("mauritius", person);
   const questionNotes = participantQuestionNotes(person, group);
   const miniNotes = participantMiniNotes(person, group);
-  const privateRow = stakeholderPrivateDataFor("mauritius", person);
-  const privateDetails = stakeholderPrivateRowHasContent(privateRow)
-    ? `<h4>Stakeholder interview</h4><ul>${["Feedback first interview", "University_Dissertation", "Comments", "Choice 1", "Choice 2", "Choice 3"].map(field => {
-      const value = stakeholderSheetField(privateRow, field);
-      return value ? `<li><b>${esc(field.replace("_", " / "))}:</b> ${esc(value)}</li>` : "";
-    }).join("")}</ul>`
-    : "";
-  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${privateDetails}${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${questionNotes.length ? `<h4>Mentor question feedback</h4><ul>${questionNotes.map(item => `<li><b>Q${esc(item.qid)} · ${esc(item.mentor)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual mentor notes from completed questions yet.</p>`}${miniNotes.length ? `<h4>Jury mini-project feedback</h4><ul>${miniNotes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
+  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${questionNotes.length ? `<h4>Mentor question feedback</h4><ul>${questionNotes.map(item => `<li><b>Q${esc(item.qid)} · ${esc(item.mentor)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual mentor notes from completed questions yet.</p>`}${miniNotes.length ? `<h4>Jury mini-project feedback</h4><ul>${miniNotes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
 }
 
 function stakeholderMadaNewbieDetails(person, group) {
   const adminNotes = participantAdminNotes("madagascar", person);
   const notes = participantMadaNotes(person);
-  const privateRow = stakeholderPrivateDataFor("madagascar", person);
-  const privateDetails = stakeholderPrivateRowHasContent(privateRow)
-    ? `<h4>Stakeholder interview</h4><ul>${["Feedback first interview", "University_Dissertation", "Comments", "Choice 1", "Choice 2", "Choice 3"].map(field => {
-      const value = stakeholderSheetField(privateRow, field);
-      return value ? `<li><b>${esc(field.replace("_", " / "))}:</b> ${esc(value)}</li>` : "";
-    }).join("")}</ul>`
-    : "";
-  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${privateDetails}${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${notes.length ? `<h4>Jury mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
+  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${notes.length ? `<h4>Jury mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
 }
 
 function stakeholderIndividualRow(person, group, isMada, eventKey) {
