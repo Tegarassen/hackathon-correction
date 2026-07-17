@@ -3220,6 +3220,17 @@ function participantStakeholderFeedback(person, group) {
   return notes.length ? notes.join(" · ") : "No individual stakeholder feedback yet.";
 }
 
+// Mirrors participantStakeholderFeedback above so the Madagascar AI-summary payload carries
+// exactly the same sources shown to the admin in the "Further info" column (admin notes +
+// jury individual notes) — previously this used buildMadaPersonFeedback, which only included
+// jury notes and silently dropped admin feedback from what the AI saw.
+function participantMadaStakeholderFeedback(person) {
+  const adminNotes = participantAdminNotes("madagascar", person).map(item => `Admin: ${item.note}`);
+  const miniNotes = participantMadaNotes(person).map(item => `${item.jury}: ${item.note}`);
+  const notes = [...adminNotes, ...miniNotes];
+  return notes.length ? notes.join(" · ") : "No individual stakeholder feedback yet.";
+}
+
 function participantAdminNotes(eventKey, person) {
   const note = state.adminIndividualFeedback?.[adminFeedbackKey(eventKey, person)];
   return note?.feedback?.trim()
@@ -3309,7 +3320,13 @@ function fallbackStakeholderPersonSummary(person, group, isMada) {
 
 function stakeholderPersonSummary(eventKey, person, group, isMada) {
   const aiSummary = state.stakeholderPersonSummaries?.[stakeholderPersonSummaryKey(eventKey, person)];
-  if (aiSummary && !String(aiSummary).toLowerCase().includes("available individual feedback indicates")) return aiSummary;
+  // Some cached AI summaries were generated before individual/admin notes existed (or, for
+  // Madagascar, before the AI payload included admin notes at all) and are stuck saying there
+  // isn't enough feedback even though the Further info column now has real notes. Treat those
+  // generic "not enough" phrasings the same as the known placeholder and recompute locally
+  // instead of showing stale text.
+  const looksGeneric = aiSummary && /available individual feedback indicates|does not yet have (enough|individual)|not enough (saved )?individual feedback/i.test(aiSummary);
+  if (aiSummary && !looksGeneric) return aiSummary;
 
   return fallbackStakeholderPersonSummary(person, group, isMada);
 }
@@ -3388,7 +3405,7 @@ function stakeholderPayload(eventKey) {
         miniProjectSummary: buildMadaGroupSummary(group),
         participants: group.participants.map(person => ({
           name: person,
-          feedback: buildMadaPersonFeedback(person)
+          feedback: participantMadaStakeholderFeedback(person)
         }))
       }))
     };
