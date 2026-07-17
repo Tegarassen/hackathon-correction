@@ -3359,6 +3359,17 @@ function participantStakeholderFeedback(person, group) {
   return notes.length ? notes.join(" · ") : "No individual stakeholder feedback yet.";
 }
 
+// Mirrors participantStakeholderFeedback above so the Madagascar AI-summary payload carries
+// exactly the same sources shown to the admin in the "Further info" column (admin notes +
+// jury individual notes) — previously this used buildMadaPersonFeedback, which only included
+// jury notes and silently dropped admin feedback from what the AI saw.
+function participantMadaStakeholderFeedback(person) {
+  const adminNotes = participantAdminNotes("madagascar", person).map(item => `Admin: ${item.note}`);
+  const miniNotes = participantMadaNotes(person).map(item => `${item.jury}: ${item.note}`);
+  const notes = [...adminNotes, ...miniNotes];
+  return notes.length ? notes.join(" · ") : "No individual stakeholder feedback yet.";
+}
+
 function participantAdminNotes(eventKey, person) {
   const note = state.adminIndividualFeedback?.[adminFeedbackKey(eventKey, person)];
   return note?.feedback?.trim()
@@ -3448,7 +3459,13 @@ function fallbackStakeholderPersonSummary(person, group, isMada) {
 
 function stakeholderPersonSummary(eventKey, person, group, isMada) {
   const aiSummary = state.stakeholderPersonSummaries?.[stakeholderPersonSummaryKey(eventKey, person)];
-  if (aiSummary && !String(aiSummary).toLowerCase().includes("available individual feedback indicates")) return aiSummary;
+  // Some cached AI summaries were generated before individual/admin notes existed (or, for
+  // Madagascar, before the AI payload included admin notes at all) and are stuck saying there
+  // isn't enough feedback even though the Further info column now has real notes. Treat those
+  // generic "not enough" phrasings the same as the known placeholder and recompute locally
+  // instead of showing stale text.
+  const looksGeneric = aiSummary && /available individual feedback indicates|does not yet have (enough|individual)|not enough (saved )?individual feedback/i.test(aiSummary);
+  if (aiSummary && !looksGeneric) return aiSummary;
 
   return fallbackStakeholderPersonSummary(person, group, isMada);
 }
@@ -3458,6 +3475,18 @@ function stakeholderWinnerView(eventKey, rows) {
   if (!winner) return "";
   const score = winner.total !== undefined ? `${winner.total}/${winner.max}` : `${winner.average}/${winner.max}`;
   return `<section class="card report-card stakeholder-winner-card"><div><p class="eyebrow">Hackathon winner</p><h2>${esc(winner.group.name)}</h2><p class="subtle">${esc(stakeholderEventLabel(eventKey))} winner based on the current saved scores.</p></div><span>${esc(score)}</span></section>`;
+}
+
+function stakeholderOfficeWinnersView(rows) {
+  // Offices (Diego, Fina, Tana) are a Madagascar-only concept, so this table only makes sense
+  // on the Madagascar stakeholder dashboard. `rows` is madaScoreboard()'s output, already sorted
+  // descending by average — filtering by office preserves that order, so the first match per
+  // office is that office's current leader.
+  const winners = madaOffices.map(office => {
+    const officeRows = rows.filter(row => (row.group.office || madaOffices[0]) === office);
+    return { office, winner: officeRows[0], groupCount: officeRows.length };
+  });
+  return `<article class="card report-card stakeholder-office-winners-section" id="stakeholder-office-winners"><div class="report-heading"><div><p class="eyebrow">Per-office results</p><h2>Group winner per office</h2><p class="subtle">The top-scoring group in each office, based on the current mini-project average.</p></div><span class="ai-badge">${madaOffices.length} offices</span></div><div class="stakeholder-table-wrap"><table class="stakeholder-individual-table"><thead><tr><th>Office</th><th>Winning group</th><th>Score</th><th>Jury reviews</th></tr></thead><tbody>${winners.map(({ office, winner, groupCount }) => `<tr><td data-label="Office"><strong>${esc(office)}</strong><small>${groupCount} group${groupCount === 1 ? "" : "s"}</small></td><td data-label="Winning group">${winner && winner.average > 0 ? esc(winner.group.name) : "No scores yet"}</td><td data-label="Score">${winner ? `${winner.average}/${winner.max}` : "—"}</td><td data-label="Jury reviews">${winner ? winner.juryCount : 0}</td></tr>`).join("")}</tbody></table></div></article>`;
 }
 
 function stakeholderMetricStrip(metrics) {
@@ -3725,7 +3754,7 @@ function stakeholderPayload(eventKey) {
         miniProjectSummary: buildMadaGroupSummary(group),
         participants: group.participants.map(person => ({
           name: person,
-          feedback: buildMadaPersonFeedback(person)
+          feedback: participantMadaStakeholderFeedback(person)
         }))
       }))
     };
@@ -3970,6 +3999,7 @@ function stakeholderDashboard(eventKey) {
   const rows = isMada ? madaScoreboard() : combinedScoreboard();
   const individualSection = stakeholderIndividualDashboard(eventKey);
   const winnerView = stakeholderWinnerView(eventKey, rows);
+  const officeWinnersView = isMada ? stakeholderOfficeWinnersView(rows) : "";
   const cards = isMada
     ? madaGroups().map(group => `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)} · ${esc(group.office || "")}</p><h2>Group and work context</h2></div><span class="ai-badge">${madaGroupAverage(group)}/${madaProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${madaGroupAverage(group)}/${madaProjectTotal}`, label: "Mini-project average" }, { value: String(madaReviewsForGroup(group).length), label: "Jury reviews" }, { value: String(group.participants.length), label: "Newbies" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildMadaGroupSummary(group))}</p>${stakeholderMadaScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${madaProjectBreakdownView(group)}</details></article>`).join("")
     : state.data.groups.map(group => {
@@ -3980,7 +4010,7 @@ function stakeholderDashboard(eventKey) {
 
   const privateSheetView = stakeholderPrivateSheetView(eventKey);
   const privateButton = privateSheetView ? `<button class="secondary" data-scroll-target="stakeholder-private-sheet">Interview choices</button>` : "";
-  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions"><button class="secondary" data-scroll-target="stakeholder-individual">Individual table</button>${privateButton}<button class="secondary" data-scroll-target="stakeholder-groups">Group details</button><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button></div></section><section class="report-stack">${winnerView}${individualSection}${privateSheetView}<div id="stakeholder-groups" class="stakeholder-anchor"></div>${cards}</section></main>`);
+  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions">${isMada ? `<button class="secondary" data-scroll-target="stakeholder-office-winners">Office winners</button>` : ""}<button class="secondary" data-scroll-target="stakeholder-individual">Individual table</button>${privateButton}<button class="secondary" data-scroll-target="stakeholder-groups">Group details</button><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button></div></section><section class="report-stack">${winnerView}${officeWinnersView}${individualSection}${privateSheetView}<div id="stakeholder-groups" class="stakeholder-anchor"></div>${cards}</section></main>`);
   queueStakeholderAISummary(eventKey);
 }
 
