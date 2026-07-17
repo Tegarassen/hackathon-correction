@@ -137,6 +137,7 @@ state = {
   stakeholderPersonSummaries: state.stakeholderPersonSummaries || {},
   stakeholderSummaryStatus: state.stakeholderSummaryStatus || {},
   stakeholderSummaryError: state.stakeholderSummaryError || {},
+  stakeholderPrivateData: state.stakeholderPrivateData || {},
   mentors: state.mentors || defaultMentors,
   juries: state.juries || defaultJuries,
   groupCorrections: state.groupCorrections || {},
@@ -859,6 +860,10 @@ function stakeholderPersonSummaryKey(eventKey, person) {
   return `${eventKey}|${person}`;
 }
 
+function stakeholderPrivateDataKey(eventKey, person) {
+  return `${eventKey}|${person}`;
+}
+
 function miniReviewKey(groupId, juryName) {
   return `${groupId}|${juryName}`;
 }
@@ -870,20 +875,25 @@ const normalizePhotoName = value => String(value || "")
   .replace(/\.[^.]+$/g, "")
   .replace(/[^a-z0-9]+/gi, "")
   .toLowerCase();
+const participantDisplayNames = {
+  "Hiresha Rakissoon": "Hiresha Ramkisson"
+};
+const displayParticipantName = person => participantDisplayNames[person] || person;
 const initials = name => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
 const photoFor = person => state.photoUrls?.[person] || "";
 
 function participantAvatar(person, size = "small", clickable = true) {
   const url = photoFor(person);
+  const displayName = displayParticipantName(person);
   return url
     ? clickable
-      ? `<button type="button" class="photo-open" data-photo-url="${esc(url)}" data-photo-name="${esc(person)}" title="Open ${esc(person)} photo"><img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false"></button>`
-      : `<img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(person)}" draggable="false" oncontextmenu="return false">`
-    : `<span class="participant-photo placeholder ${size}">${esc(initials(person))}</span>`;
+      ? `<button type="button" class="photo-open" data-photo-url="${esc(url)}" data-photo-name="${esc(displayName)}" title="Open ${esc(displayName)} photo"><img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(displayName)}" draggable="false" oncontextmenu="return false"></button>`
+      : `<img class="participant-photo ${size}" src="${esc(url)}" alt="${esc(displayName)}" draggable="false" oncontextmenu="return false">`
+    : `<span class="participant-photo placeholder ${size}">${esc(initials(displayName))}</span>`;
 }
 
 function participantNameBlock(person, size = "small", clickablePhoto = true) {
-  return `<span class="participant-name-block">${participantAvatar(person, size, clickablePhoto)}<span>${esc(person)}</span></span>`;
+  return `<span class="participant-name-block">${participantAvatar(person, size, clickablePhoto)}<span>${esc(displayParticipantName(person))}</span></span>`;
 }
 
 function matchParticipantFromFile(file) {
@@ -1086,6 +1096,28 @@ function applyAdminIndividualFeedbackRow(row) {
 function removeAdminIndividualFeedbackRow(row) {
   if (!row) return;
   delete state.adminIndividualFeedback[adminFeedbackKey(row.event_key || "mauritius", row.participant_name)];
+}
+
+function applyStakeholderPrivateDataRow(row) {
+  if (!row?.participant_name) return;
+  const eventKey = row.event_key || "mauritius";
+  const key = stakeholderPrivateDataKey(eventKey, row.participant_name);
+  state.stakeholderPrivateData[key] = {
+    id: row.id,
+    eventKey,
+    groupId: Number(row.group_id),
+    groupName: row.group_name || "",
+    participantName: row.participant_name,
+    stakeholderChoice: row.stakeholder_choice || "",
+    privateNotes: row.private_notes || "",
+    sheetData: row.sheet_data || {},
+    updatedAt: row.updated_at || row.created_at || ""
+  };
+}
+
+function removeStakeholderPrivateDataRow(row) {
+  if (!row) return;
+  delete state.stakeholderPrivateData[stakeholderPrivateDataKey(row.event_key || "mauritius", row.participant_name)];
 }
 
 function applyStakeholderAISummaryRow(row) {
@@ -1993,7 +2025,7 @@ async function loadSharedData(options = {}) {
   saveLocal();
 
   try {
-    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, stakeholderCodesResult, eventGroupsResult, projectAssignments, corrections, remarks, adminFeedback, stakeholderAISummaries, miniReviews, photoRecords, reports, aiUsage, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
+    const [mentorsResult, mentorCodesResult, juriesResult, juryCodesResult, jurySettingsResult, stakeholderCodesResult, eventGroupsResult, projectAssignments, corrections, remarks, adminFeedback, stakeholderAISummaries, stakeholderPrivateRows, miniReviews, photoRecords, reports, aiUsage, history, madaJuriesResult, madaAssignments, madaReviews] = await Promise.all([
       supabaseClient.from("mentors").select("*").order("name", { ascending: true }),
       includeAdminData ? supabaseClient.from("mentor_access_codes").select("*").order("mentor_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("juries").select("*").order("name", { ascending: true }),
@@ -2006,6 +2038,7 @@ async function loadSharedData(options = {}) {
       supabaseClient.from("individual_remarks").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("admin_individual_feedback").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("stakeholder_ai_summaries").select("*").order("updated_at", { ascending: false }),
+      includeAdminData ? supabaseClient.from("stakeholder_private_data").select("*").order("event_key", { ascending: true }).order("group_id", { ascending: true }).order("participant_name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabaseClient.from("mini_project_reviews").select("*").order("updated_at", { ascending: false }),
       supabaseClient.from("newbie_photos").select("*").order("updated_at", { ascending: false }),
       includeAdminData ? supabaseClient.from("ai_reports").select("*").order("generated_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
@@ -2023,6 +2056,7 @@ async function loadSharedData(options = {}) {
     if (miniReviews.error) console.warn("Could not load mini_project_reviews table. Run the mini project SQL setup when ready.", miniReviews.error);
     if (adminFeedback.error) console.warn("Could not load admin_individual_feedback table. Run the latest setup script to let admins add stakeholder notes.", adminFeedback.error);
     if (stakeholderAISummaries.error) console.warn("Could not load stakeholder_ai_summaries table. Run the latest setup script to show saved stakeholder summaries.", stakeholderAISummaries.error);
+    if (includeAdminData && stakeholderPrivateRows.error) console.warn("Could not load stakeholder_private_data table. Run the latest setup script to manage stakeholder sheet data.", stakeholderPrivateRows.error);
     if (photoRecords.error) console.warn("Could not load newbie_photos table. Run the photo SQL setup when ready.", photoRecords.error);
     if (includeAdminData && aiUsage.error) console.warn("Could not load ai_usage_events table. Run the latest setup script to show AI usage.", aiUsage.error);
     state.mentorCodeSetupMissing = includeAdminData && Boolean(mentorCodesResult.error);
@@ -2056,12 +2090,16 @@ async function loadSharedData(options = {}) {
     state.miniProjectAssignments = {};
     state.madaReviews = {};
     state.madaAssignments = {};
-    if (includeAdminData) state.reports = {};
+    if (includeAdminData) {
+      state.reports = {};
+      state.stakeholderPrivateData = {};
+    }
 
     corrections.data.forEach(applyGroupCorrectionRow);
     remarks.data.forEach(applyIndividualRemarkRow);
     if (!adminFeedback.error) adminFeedback.data.forEach(applyAdminIndividualFeedbackRow);
     if (!stakeholderAISummaries.error) stakeholderAISummaries.data.forEach(applyStakeholderAISummaryRow);
+    if (includeAdminData && !stakeholderPrivateRows.error) stakeholderPrivateRows.data.forEach(applyStakeholderPrivateDataRow);
     if (!projectAssignments.error) projectAssignments.data.forEach(applyMiniProjectAssignmentRow);
     if (!miniReviews.error) miniReviews.data.forEach(applyMiniProjectReviewRow);
     if (!madaAssignments.error) madaAssignments.data.forEach(applyMadaAssignmentRow);
@@ -2087,7 +2125,7 @@ function scheduleRefresh() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     saveLocal();
-    const formOpen = Boolean(document.querySelector("#group-review-form, #mini-project-form, #mini-project-topic-form, #admin-individual-feedback-form, .admin-mini-review-form"));
+    const formOpen = Boolean(document.querySelector("#group-review-form, #mini-project-form, #mini-project-topic-form, #admin-individual-feedback-form, #stakeholder-private-data-form, .admin-mini-review-form"));
     if (location.hash === "#admin" && state.session?.role === "admin") {
       adminDashboard(lastAdminMentor);
       return;
@@ -2114,7 +2152,7 @@ function scheduleMadaRefresh() {
   clearTimeout(madaRefreshTimer);
   madaRefreshTimer = setTimeout(() => {
     saveLocal();
-    const formOpen = Boolean(document.querySelector("#mada-review-form, #mada-topic-form, #admin-individual-feedback-form, .admin-mada-review-form"));
+    const formOpen = Boolean(document.querySelector("#mada-review-form, #mada-topic-form, #admin-individual-feedback-form, #stakeholder-private-data-form, .admin-mada-review-form"));
     if (formOpen) return;
     if (location.hash === "#admin/spoon-madagascar" && state.session?.role === "admin") {
       madaAdminPage();
@@ -2150,6 +2188,12 @@ function subscribeSharedData() {
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "stakeholder_ai_summaries" }, payload => {
       if (payload.eventType !== "DELETE") applyStakeholderAISummaryRow(payload.new);
+      scheduleRefresh();
+      scheduleMadaRefresh();
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "stakeholder_private_data" }, payload => {
+      if (payload.eventType === "DELETE") removeStakeholderPrivateDataRow(payload.old);
+      else applyStakeholderPrivateDataRow(payload.new);
       scheduleRefresh();
       scheduleMadaRefresh();
     })
@@ -2824,6 +2868,101 @@ async function persistAdminIndividualFeedbackAsAdmin(eventKey, data) {
   if (error) throw error;
 }
 
+function stakeholderPrivatePayloadFromForm(eventKey, data) {
+  const groups = eventKey === "madagascar" ? madaGroups() : state.data.groups;
+  const rows = [];
+  const deletions = [];
+  const now = new Date().toISOString();
+
+  groups.forEach(group => {
+    (group.participants || []).forEach(person => {
+      const { firstName, surname } = splitNameParts(person);
+      const sheetData = {
+        NAME: firstName,
+        SURNAME: surname,
+        "Stakeholder summary": String(data[`private::${person}::Stakeholder summary`] || "").trim(),
+        "Feedback first interview": String(data[`private::${person}::Feedback first interview`] || "").trim(),
+        University_Dissertation: String(data[`private::${person}::University_Dissertation`] || "").trim(),
+        Comments: String(data[`private::${person}::Comments`] || "").trim(),
+        "Choice 1": String(data[`private::${person}::Choice 1`] || "").trim(),
+        "Choice 2": String(data[`private::${person}::Choice 2`] || "").trim(),
+        "Choice 3": String(data[`private::${person}::Choice 3`] || "").trim()
+      };
+      sheetData["Stakeholder summary"] = stakeholderInterviewSummaryFromData(sheetData);
+      const hasPrivateData = ["Feedback first interview", "University_Dissertation", "Comments", "Choice 1", "Choice 2", "Choice 3"].some(field => sheetData[field]);
+      const key = stakeholderPrivateDataKey(eventKey, person);
+
+      if (hasPrivateData) {
+        const record = {
+          eventKey,
+          groupId: Number(group.id),
+          groupName: group.name,
+          participantName: person,
+          stakeholderChoice: [sheetData["Choice 1"], sheetData["Choice 2"], sheetData["Choice 3"]].filter(Boolean).join(" / "),
+          privateNotes: sheetData.Comments,
+          sheetData,
+          updatedAt: now
+        };
+        state.stakeholderPrivateData[key] = record;
+        rows.push({
+          event_key: eventKey,
+          group_id: Number(group.id),
+          group_name: group.name,
+          participant_name: person,
+          stakeholder_choice: record.stakeholderChoice,
+          private_notes: record.privateNotes,
+          sheet_data: sheetData
+        });
+      } else if (state.stakeholderPrivateData[key]) {
+        delete state.stakeholderPrivateData[key];
+        deletions.push(person);
+      }
+    });
+  });
+
+  return { rows, deletions };
+}
+
+async function persistStakeholderPrivateDataAsAdmin(eventKey, data) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can manage stakeholder sheet data.");
+  const { rows, deletions } = stakeholderPrivatePayloadFromForm(eventKey, data);
+  saveLocal();
+  if (!remoteEnabled()) return;
+
+  const jobs = [];
+  if (rows.length) {
+    jobs.push(supabaseClient
+      .from("stakeholder_private_data")
+      .upsert(rows, { onConflict: "event_key,participant_name" }));
+  }
+  deletions.forEach(person => {
+    jobs.push(supabaseClient
+      .from("stakeholder_private_data")
+      .delete()
+      .eq("event_key", eventKey)
+      .eq("participant_name", person));
+  });
+
+  const results = await Promise.all(jobs);
+  const error = results.find(result => result.error)?.error;
+  if (error) throw error;
+}
+
+async function deleteStakeholderPrivateDataAsAdmin(eventKey) {
+  if (state.session?.role !== "admin") throw new Error("Only admin can delete stakeholder sheet data.");
+  Object.keys(state.stakeholderPrivateData || {}).forEach(key => {
+    if (key.startsWith(`${eventKey}|`)) delete state.stakeholderPrivateData[key];
+  });
+  saveLocal();
+  if (!remoteEnabled()) return;
+
+  const { error } = await supabaseClient
+    .from("stakeholder_private_data")
+    .delete()
+    .eq("event_key", eventKey);
+  if (error) throw error;
+}
+
 async function persistMadaReviewAsAdmin(review) {
   if (state.session?.role !== "admin") throw new Error("Only admin can edit Spoon Madagascar jury feedback.");
 
@@ -3372,17 +3511,226 @@ function stakeholderMadaScoreList(group) {
   return `<div class="stakeholder-score-pills">${reviews.map(review => `<span>${esc(madaFirstName(review.juryName || "Jury"))}: ${madaProjectScore(review)}/${madaProjectTotal}</span>`).join("")}</div>`;
 }
 
+function splitNameParts(person) {
+  const parts = String(person || "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || "",
+    surname: parts.slice(1).join(" ")
+  };
+}
+
+function normalizeCsvName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  const input = String(text || "").replace(/^\uFEFF/, "");
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+    const next = input[i + 1];
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        field += '"';
+        i += 1;
+      } else if (char === '"') quoted = false;
+      else field += char;
+    } else if (char === '"') quoted = true;
+    else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else if (char !== "\r") field += char;
+  }
+  row.push(field);
+  rows.push(row);
+
+  const [headers = [], ...body] = rows.filter(item => item.some(cell => String(cell || "").trim()));
+  const cleanHeaders = headers.map(header => String(header || "").trim());
+  return body.map(item => Object.fromEntries(cleanHeaders.map((header, index) => [header, String(item[index] || "").trim()])));
+}
+
+function compactText(value, max = 520) {
+  const text = String(value || "")
+    .replace(/Interview Summary:/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= max) return text;
+  const clipped = text.slice(0, max).replace(/\s+\S*$/, "").trim();
+  return `${clipped}.`;
+}
+
+function stakeholderInterviewSummaryFromData(sheet = {}) {
+  const comments = compactText(sheet.Comments, 280);
+  const dissertation = compactText(sheet.University_Dissertation, 150);
+  const source = comments.toLowerCase();
+  const strengths = [];
+  const cautions = [];
+
+  if (/communicat|fluent|speak|présent|present/.test(source)) strengths.push("communicates well");
+  if (/technical|coding|programming|developer|oop|sql|data|ai|apex|react|java/.test(source)) strengths.push("has a technical foundation");
+  if (/learn|curious|motivated|attitude|willing|challenge|eager/.test(source)) strengths.push("shows a strong learning attitude");
+  if (/team|lead|leader|collaboration/.test(source)) strengths.push("can contribute well in a team");
+  if (/confident|composure|at ease/.test(source)) strengths.push("presents with confidence");
+
+  if (/weak|unclear|improve|stressed|stress|basic|not good|failed/.test(source)) cautions.push("may need support to strengthen consistency and confidence");
+  if (/communication moyenne|communication ok|need to improve in french|french.*3\/5/.test(source)) cautions.push("communication can be developed further");
+  if (/frontend|front-end|front end/.test(source) && /weak|didn.t like|not like/.test(source)) cautions.push("front-end work may not be their strongest area");
+
+  const profile = strengths.length
+    ? `${[...new Set(strengths)].slice(0, 3).join(", ")}.`
+    : comments || "The stakeholder one-on-one notes give a limited profile, but useful placement information is available.";
+  const caution = cautions.length ? ` ${[...new Set(cautions)].slice(0, 2).join(" and ")}.` : "";
+  const dissertationCopy = dissertation ? ` Project/dissertation: ${dissertation}.` : "";
+
+  return compactText(`${profile}${caution}${dissertationCopy}`, 520);
+}
+
+function stakeholderCsvPersonMap(eventKey) {
+  const groups = eventKey === "madagascar" ? madaGroups() : state.data.groups;
+  const map = new Map();
+  groups.forEach(group => {
+    (group.participants || []).forEach(person => {
+      const { firstName, surname } = splitNameParts(person);
+      map.set(normalizeCsvName(person), person);
+      map.set(normalizeCsvName(`${firstName} ${surname}`), person);
+      map.set(normalizeCsvName(`${surname} ${firstName}`), person);
+    });
+  });
+  return map;
+}
+
+function applyStakeholderCsvToForm(form, rows) {
+  const eventKey = form.dataset.eventKey || "mauritius";
+  const personMap = stakeholderCsvPersonMap(eventKey);
+  let matched = 0;
+  const missing = [];
+
+  rows.forEach(row => {
+    const name = `${row.NAME || row.Name || row.name || ""} ${row.SURNAME || row.Surname || row.surname || ""}`;
+    const person = personMap.get(normalizeCsvName(name)) || personMap.get(normalizeCsvName(row.Newbie || row.Participant || row.participant_name || ""));
+    if (!person) {
+      if (name.trim()) missing.push(name.trim());
+      return;
+    }
+    matched += 1;
+    [
+      "Feedback first interview",
+      "University_Dissertation",
+      "Comments",
+      "Choice 1",
+      "Choice 2",
+      "Choice 3"
+    ].forEach(field => {
+      const input = form.elements[`private::${person}::${field}`];
+      if (input) input.value = row[field] || row[field.replace("_", " ")] || "";
+    });
+    const summaryInput = form.elements[`private::${person}::Stakeholder summary`];
+    if (summaryInput) {
+      summaryInput.value = stakeholderInterviewSummaryFromData({
+        "Feedback first interview": row["Feedback first interview"] || "",
+        University_Dissertation: row.University_Dissertation || row["University Dissertation"] || "",
+        Comments: row.Comments || "",
+        "Choice 1": row["Choice 1"] || "",
+        "Choice 2": row["Choice 2"] || "",
+        "Choice 3": row["Choice 3"] || ""
+      });
+    }
+  });
+
+  return { matched, missing };
+}
+
+function stakeholderPrivateDataFor(eventKey, person) {
+  return state.stakeholderPrivateData?.[stakeholderPrivateDataKey(eventKey, person)] || null;
+}
+
+function stakeholderSheetField(row, field) {
+  return String(row?.sheetData?.[field] || "").trim();
+}
+
+function stakeholderChoiceList(eventKey, person) {
+  const row = stakeholderPrivateDataFor(eventKey, person);
+  if (!row) return [];
+  const sheet = row.sheetData || {};
+  return [sheet["Choice 1"], sheet["Choice 2"], sheet["Choice 3"]]
+    .map(value => String(value || "").trim())
+    .filter(Boolean);
+}
+
+function stakeholderChoicePills(eventKey, person) {
+  const choices = stakeholderChoiceList(eventKey, person);
+  if (!choices.length) return `<span class="empty-choice">No choice added</span>`;
+  return `<div class="stakeholder-choice-pills">${choices.map((choice, index) => `<span><b>${index + 1}</b>${esc(choice)}</span>`).join("")}</div>`;
+}
+
+function stakeholderInterviewPreview(eventKey, person) {
+  const row = stakeholderPrivateDataFor(eventKey, person);
+  if (!stakeholderPrivateRowHasContent(row)) return `<span class="empty-choice">No interview data added</span>`;
+  const summary = stakeholderInterviewSummaryFromData(row.sheetData || {});
+  const firstInterview = stakeholderSheetField(row, "Feedback first interview");
+  const comments = stakeholderSheetField(row, "Comments");
+  const dissertation = stakeholderSheetField(row, "University_Dissertation");
+  return `<div class="stakeholder-interview-preview"><p>${esc(summary)}</p>${firstInterview ? `<details class="inline-detail"><summary>First interview feedback</summary><div><p>${esc(firstInterview)}</p></div></details>` : ""}<details class="inline-detail"><summary>One-on-one details</summary><div>${comments ? `<h4>Stakeholder comments</h4><p>${esc(comments)}</p>` : ""}${dissertation ? `<h4>University / dissertation</h4><p>${esc(dissertation)}</p>` : ""}${stakeholderChoiceList(eventKey, person).length ? `<h4>Choices</h4>${stakeholderChoicePills(eventKey, person)}` : ""}</div></details></div>`;
+}
+
+function stakeholderPrivateRowHasContent(row) {
+  if (!row) return false;
+  const fields = ["Feedback first interview", "University_Dissertation", "Comments", "Choice 1", "Choice 2", "Choice 3"];
+  return fields.some(field => stakeholderSheetField(row, field));
+}
+
+function stakeholderPrivateSheetView(eventKey) {
+  const isMada = eventKey === "madagascar";
+  const people = isMada
+    ? madaGroups().flatMap(group => group.participants.map(person => ({ group, person })))
+    : state.data.groups.flatMap(group => group.participants.map(person => ({ group, person })));
+  const rows = people
+    .map(({ group, person }) => ({ group, person, row: stakeholderPrivateDataFor(eventKey, person) }))
+    .filter(item => stakeholderPrivateRowHasContent(item.row));
+  if (!rows.length) return "";
+
+  return `<section class="card report-card stakeholder-private-section" id="stakeholder-private-sheet"><div class="report-heading"><div><p class="eyebrow">Stakeholder interview data</p><h2>Interview comments and choices</h2><p class="subtle">Stakeholder sheet information shared through the secure dashboard code.</p></div><span class="ai-badge">${rows.length} row${rows.length === 1 ? "" : "s"}</span></div><div class="stakeholder-table-wrap"><table class="stakeholder-private-table"><thead><tr><th>Newbie</th><th>Summary</th><th>Feedback first interview</th><th>University / dissertation</th><th>Comments</th><th>Choice 1</th><th>Choice 2</th><th>Choice 3</th></tr></thead><tbody>${rows.map(({ group, person, row }) => `<tr><td data-label="Newbie">${participantNameBlock(person, "small", true)}<small>${esc(group.name)}${group.office ? ` · ${esc(group.office)}` : ""}</small></td><td data-label="Summary">${esc(stakeholderInterviewSummaryFromData(row.sheetData || {}) || "—")}</td><td data-label="Feedback first interview">${esc(stakeholderSheetField(row, "Feedback first interview") || "—")}</td><td data-label="University / dissertation">${esc(stakeholderSheetField(row, "University_Dissertation") || "—")}</td><td data-label="Comments">${esc(stakeholderSheetField(row, "Comments") || "—")}</td><td data-label="Choice 1">${esc(stakeholderSheetField(row, "Choice 1") || "—")}</td><td data-label="Choice 2">${esc(stakeholderSheetField(row, "Choice 2") || "—")}</td><td data-label="Choice 3">${esc(stakeholderSheetField(row, "Choice 3") || "—")}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+
 function stakeholderNewbieDetails(person, group) {
   const adminNotes = participantAdminNotes("mauritius", person);
   const questionNotes = participantQuestionNotes(person, group);
   const miniNotes = participantMiniNotes(person, group);
-  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${questionNotes.length ? `<h4>Mentor question feedback</h4><ul>${questionNotes.map(item => `<li><b>Q${esc(item.qid)} · ${esc(item.mentor)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual mentor notes from completed questions yet.</p>`}${miniNotes.length ? `<h4>Jury mini-project feedback</h4><ul>${miniNotes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
+  const privateRow = stakeholderPrivateDataFor("mauritius", person);
+  const privateDetails = stakeholderPrivateRowHasContent(privateRow)
+    ? `<h4>Stakeholder interview</h4><ul>${["Feedback first interview", "University_Dissertation", "Comments", "Choice 1", "Choice 2", "Choice 3"].map(field => {
+      const value = stakeholderSheetField(privateRow, field);
+      return value ? `<li><b>${esc(field.replace("_", " / "))}:</b> ${esc(value)}</li>` : "";
+    }).join("")}</ul>`
+    : "";
+  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${privateDetails}${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${questionNotes.length ? `<h4>Mentor question feedback</h4><ul>${questionNotes.map(item => `<li><b>Q${esc(item.qid)} · ${esc(item.mentor)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual mentor notes from completed questions yet.</p>`}${miniNotes.length ? `<h4>Jury mini-project feedback</h4><ul>${miniNotes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
 }
 
 function stakeholderMadaNewbieDetails(person, group) {
   const adminNotes = participantAdminNotes("madagascar", person);
   const notes = participantMadaNotes(person);
-  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${notes.length ? `<h4>Jury mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
+  const privateRow = stakeholderPrivateDataFor("madagascar", person);
+  const privateDetails = stakeholderPrivateRowHasContent(privateRow)
+    ? `<h4>Stakeholder interview</h4><ul>${["Feedback first interview", "University_Dissertation", "Comments", "Choice 1", "Choice 2", "Choice 3"].map(field => {
+      const value = stakeholderSheetField(privateRow, field);
+      return value ? `<li><b>${esc(field.replace("_", " / "))}:</b> ${esc(value)}</li>` : "";
+    }).join("")}</ul>`
+    : "";
+  return `<details class="stakeholder-table-details"><summary>Open details</summary><div>${privateDetails}${adminNotes.length ? `<h4>Admin feedback</h4><ul>${adminNotes.map(item => `<li><b>${esc(item.admin)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : ""}${notes.length ? `<h4>Jury mini-project feedback</h4><ul>${notes.map(item => `<li><b>${esc(item.jury)} · ${esc(item.score)}:</b> ${esc(item.note)}</li>`).join("")}</ul>` : `<p>No individual jury notes yet.</p>`}</div></details>`;
 }
 
 function stakeholderIndividualRow(person, group, isMada, eventKey) {
@@ -3390,8 +3738,11 @@ function stakeholderIndividualRow(person, group, isMada, eventKey) {
   const noteCount = (isMada ? participantMadaNotes(person).length : participantQuestionNotes(person, group).length + participantMiniNotes(person, group).length) + participantAdminNotes(isMada ? "madagascar" : "mauritius", person).length;
   const groupScoreCopy = isMada ? `${madaGroupAverage(group)}/${madaProjectTotal}` : `${groupScore(group)}/${knownTotalMarks()}`;
   const miniCopy = isMada ? `${madaGroupAverage(group)}/${madaProjectTotal}` : `${miniProjectAverage(group)}/${miniProjectTotal}`;
+  const pointsCopy = isMada
+    ? `<strong>${esc(groupScoreCopy)}</strong><small>Group mini-project average</small>`
+    : `<strong>${esc(groupScoreCopy)}</strong><small>Questions</small><strong>${esc(miniCopy)}</strong><small>Mini-project</small>`;
   const extraGroupCopy = isMada ? `Office: ${group.office || "—"}` : `${completedQuestionFeedback(group).length}/${state.data.questions.length} questions complete`;
-  return `<tr><td data-label="Newbie">${participantNameBlock(person, "stakeholder", false)}<small>${esc(noteCount)} note${noteCount === 1 ? "" : "s"}</small></td><td data-label="Summary"><p class="stakeholder-ai-summary">${esc(summary)}</p></td><td data-label="Group"><strong>${esc(group.name)}</strong><small>${esc(extraGroupCopy)}</small></td><td data-label="Question / group points"><strong>${esc(groupScoreCopy)}</strong><small>${isMada ? "Group mini-project average" : "Question points"}</small></td><td data-label="Mini-project"><strong>${esc(miniCopy)}</strong><small>Mini-project context</small></td><td data-label="Further info">${isMada ? stakeholderMadaNewbieDetails(person, group) : stakeholderNewbieDetails(person, group)}</td></tr>`;
+  return `<tr><td data-label="Newbie">${participantNameBlock(person, "stakeholder", true)}<small>${esc(noteCount)} note${noteCount === 1 ? "" : "s"}</small></td><td data-label="Choices">${stakeholderChoicePills(eventKey, person)}</td><td data-label="One-on-one interview">${stakeholderInterviewPreview(eventKey, person)}</td><td data-label="Summary"><p class="stakeholder-ai-summary">${esc(summary)}</p></td><td data-label="Group"><strong>${esc(group.name)}</strong><small>${esc(extraGroupCopy)}</small></td><td data-label="Points" class="stakeholder-points-cell">${pointsCopy}</td><td data-label="Further info">${isMada ? stakeholderMadaNewbieDetails(person, group) : stakeholderNewbieDetails(person, group)}</td></tr>`;
 }
 
 function stakeholderIndividualDashboard(eventKey) {
@@ -3403,7 +3754,7 @@ function stakeholderIndividualDashboard(eventKey) {
   const badge = status === "loading" ? "Refreshing" : status === "ready" ? "Summaries" : status === "cached" ? "Saved summaries" : status === "error" ? "Saved/local info" : "Local info";
   const errorCopy = state.stakeholderSummaryError?.[eventKey] || "Check the Edge Function deploy, Gemini secret, and Supabase SQL setup.";
   const statusCopy = status === "error" ? `<p class="notice compact-notice">Showing available saved/local information. ${esc(errorCopy)}</p>` : "";
-  return `<section class="card report-card stakeholder-individual-section" id="stakeholder-individual"><div class="report-heading"><div><p class="eyebrow">Individual dashboard</p><h2>Newbie feedback summaries</h2><p class="subtle">Built like a full table view: scan each newbie, then open details only when needed.</p></div><span class="ai-badge">${esc(badge)}</span></div>${statusCopy}<div class="stakeholder-table-wrap"><table class="stakeholder-individual-table"><thead><tr><th>Newbie</th><th>Summary</th><th>Group</th><th>${isMada ? "Group points" : "Question points"}</th><th>Mini-project</th><th>Further info</th></tr></thead><tbody>${people.map(({ group, person }) => stakeholderIndividualRow(person, group, isMada, eventKey)).join("")}</tbody></table></div></section>`;
+  return `<section class="card report-card stakeholder-individual-section" id="stakeholder-individual"><div class="report-heading"><div><p class="eyebrow">Individual dashboard</p><h2>Newbie feedback summaries</h2><p class="subtle">Built like a full table view: scan each newbie, interview data, choices, group context, points, and details.</p></div><span class="ai-badge">${esc(badge)}</span></div>${statusCopy}<div class="stakeholder-table-wrap"><table class="stakeholder-individual-table"><thead><tr><th>Newbie</th><th>Choices</th><th>One-on-one interview</th><th>Summary</th><th>Group</th><th>Points</th><th>Further info</th></tr></thead><tbody>${people.map(({ group, person }) => stakeholderIndividualRow(person, group, isMada, eventKey)).join("")}</tbody></table></div></section>`;
 }
 
 function stakeholderPayload(eventKey) {
@@ -3512,6 +3863,28 @@ function clearStakeholderAISummaries(eventKey) {
   stakeholderAISessionAttempts[eventKey] = false;
 }
 
+async function fetchStakeholderPrivateData(eventKey) {
+  if (!remoteEnabled() || !stakeholderAccessIsCurrent(eventKey)) return;
+  const accessCode = state.stakeholderAccessCode?.[eventKey] || "";
+  if (!accessCode) return;
+
+  try {
+    const { data, error } = await supabaseClient.rpc("get_stakeholder_private_data", {
+      requested_event_key: eventKey,
+      submitted_code: accessCode
+    });
+    if (error) throw error;
+
+    Object.keys(state.stakeholderPrivateData || {}).forEach(key => {
+      if (key.startsWith(`${eventKey}|`)) delete state.stakeholderPrivateData[key];
+    });
+    (data || []).forEach(applyStakeholderPrivateDataRow);
+    saveLocal();
+  } catch (error) {
+    console.warn("Stakeholder private data load failed", error);
+  }
+}
+
 function queueStakeholderAISummary(eventKey) {
   if (!remoteEnabled() || !supabaseClient.functions?.invoke) return;
   if (!stakeholderAccessIsCurrent(eventKey)) return;
@@ -3571,6 +3944,39 @@ function adminIndividualFeedbackView(eventKey) {
   });
 }
 
+function stakeholderPrivateDataAdminView(eventKey) {
+  const groups = eventKey === "madagascar" ? madaGroups() : state.data.groups;
+  const savedCount = groups.reduce((sum, group) => sum + (group.participants || []).filter(person => stakeholderPrivateRowHasContent(stakeholderPrivateDataFor(eventKey, person))).length, 0);
+  const fields = [
+    ["Stakeholder summary", "Stakeholder summary", "textarea"],
+    ["Feedback first interview", "Feedback first interview", "textarea"],
+    ["University_Dissertation", "University / dissertation", "input"],
+    ["Comments", "Stakeholder interview comments", "textarea"],
+    ["Choice 1", "Choice 1", "input"],
+    ["Choice 2", "Choice 2", "input"],
+    ["Choice 3", "Choice 3", "input"]
+  ];
+  const content = `<form id="stakeholder-private-data-form" data-event-key="${esc(eventKey)}" class="stakeholder-private-admin-form"><div class="admin-toggle-row sensitive-row"><span><strong>Stakeholder sheet data</strong><small>Upload a CSV with NAME, SURNAME, Feedback first interview, University_Dissertation, Comments, Choice 1, Choice 2, Choice 3.</small></span><button class="danger-mini" type="button" data-delete-private-stakeholder-data="${esc(eventKey)}">Permanently delete all ${esc(stakeholderEventLabel(eventKey))} sheet data</button></div><label class="stakeholder-csv-upload">Upload stakeholder CSV<input type="file" accept=".csv,text/csv" data-stakeholder-csv-upload="${esc(eventKey)}"></label>${groups.map(group => `<section class="admin-feedback-group stakeholder-private-admin-group"><div><strong>${esc(group.name)}</strong>${group.office ? `<small class="mada-office-badge">${esc(group.office)}</small>` : ""}</div><div class="stakeholder-private-admin-grid">${(group.participants || []).map(person => {
+    const row = stakeholderPrivateDataFor(eventKey, person);
+    const { firstName, surname } = splitNameParts(person);
+    return `<fieldset><legend>${participantNameBlock(person, "small", false)}<small>${esc(firstName)} ${esc(surname)}</small></legend>${fields.map(([field, label, type]) => {
+      const value = stakeholderSheetField(row, field);
+      const name = `private::${person}::${field}`;
+      return type === "textarea"
+        ? `<label>${esc(label)}<textarea name="${esc(name)}" rows="3">${esc(value)}</textarea></label>`
+        : `<label>${esc(label)}<input name="${esc(name)}" value="${esc(value)}"></label>`;
+    }).join("")}</fieldset>`;
+  }).join("")}</div></section>`).join("")}<button class="primary" type="submit">Save stakeholder sheet data</button><p class="subtle">Leave all private fields empty for a newbie and save to remove that newbie's private row. Use the delete button above to permanently remove every row for this event.</p></form>`;
+  return adminAccordion({
+    eyebrow: "Sensitive stakeholder sheet",
+    title: "Interview comments and choices",
+    subtitle: "Add the sheet columns used in the stakeholder view.",
+    badge: `${savedCount} row${savedCount === 1 ? "" : "s"}`,
+    extraClass: "mentor-code-admin-card",
+    content
+  });
+}
+
 function aiUsageSummaryView(eventKey = "") {
   const now = new Date();
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -3616,7 +4022,9 @@ function stakeholderDashboard(eventKey) {
       return `<article class="card report-card stakeholder-group-card"><div class="report-heading"><div><p class="eyebrow">${esc(group.name)}</p><h2>Group and work context</h2></div><span class="ai-badge">${total}/${knownTotalMarks() + miniProjectTotal}</span></div>${stakeholderMetricStrip([{ value: `${total}/${knownTotalMarks() + miniProjectTotal}`, label: "Overall points" }, { value: `${groupScore(group)}/${knownTotalMarks()}`, label: "Question points" }, { value: `${miniProjectAverage(group)}/${miniProjectTotal}`, label: "Mini-project average" }, { value: `${completed.length}/${state.data.questions.length}`, label: "Completed questions" }])}<h3>Group summary</h3><p class="summary-text">${esc(buildGroupSummary(group))}</p><h3>Completed questions</h3>${stakeholderQuestionPanel(group)}<h3>Mini project</h3>${stakeholderMiniScoreList(group)}<details class="stakeholder-detail-block"><summary>More mini-project detail</summary>${miniProjectBreakdownView(group)}</details></article>`;
     }).join("");
 
-  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions">${isMada ? `<button class="secondary" data-scroll-target="stakeholder-office-winners">Office winners</button>` : ""}<button class="secondary" data-scroll-target="stakeholder-individual">Individual table</button><button class="secondary" data-scroll-target="stakeholder-groups">Group details</button><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button></div></section><section class="report-stack">${winnerView}${officeWinnersView}${individualSection}<div id="stakeholder-groups" class="stakeholder-anchor"></div>${cards}</section></main>`);
+  const privateSheetView = stakeholderPrivateSheetView(eventKey);
+  const privateButton = privateSheetView ? `<button class="secondary" data-scroll-target="stakeholder-private-sheet">Interview choices</button>` : "";
+  shell(`<main class="page admin-page stakeholder-page"><section class="hero"><div><p class="eyebrow">Stakeholder dashboard</p><h1>${esc(stakeholderEventLabel(eventKey))}</h1></div><div class="hero-actions">${isMada ? `<button class="secondary" data-scroll-target="stakeholder-office-winners">Office winners</button>` : ""}<button class="secondary" data-scroll-target="stakeholder-individual">Individual table</button>${privateButton}<button class="secondary" data-scroll-target="stakeholder-groups">Group details</button><button class="secondary" data-action="refresh-stakeholder" data-event-key="${esc(eventKey)}">Refresh data</button></div></section><section class="report-stack">${winnerView}${officeWinnersView}${individualSection}${privateSheetView}<div id="stakeholder-groups" class="stakeholder-anchor"></div>${cards}</section></main>`);
   queueStakeholderAISummary(eventKey);
 }
 
@@ -3634,6 +4042,7 @@ async function openStakeholderDashboard() {
       return stakeholderAccessView(eventKey, friendlyError(error, "Could not verify this stakeholder link. Try again."));
     }
   }
+  await fetchStakeholderPrivateData(eventKey);
   stakeholderDashboard(eventKey);
 }
 
@@ -3795,7 +4204,7 @@ function madaAdminPage() {
   const scoreRows = madaScoreboard();
   const leader = scoreRows[0];
   const generatedCount = Object.keys(state.reports).filter(key => key.startsWith("mada-group|") || key.startsWith("mada-person|")).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${adminIndividualFeedbackView("madagascar")}${stakeholderAccessAdminView("madagascar")}${aiUsageSummaryView("madagascar")}${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Spoon Madagascar Admin</p><h1>Spoon Madagascar scoreboard & jury feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-dashboard">← Back to Mauritius admin</button><button class="primary" data-action="generate-mada-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.madaJuries.length}</strong><span>Spoon Madagascar jury</span></div><div class="stat"><strong>${madaGroups().length}</strong><span>Groups</span></div><div class="stat"><strong>${madaProjectTotal}</strong><span>Total marks (same scale as Mauritius)</span></div><div class="stat"><strong>${generatedCount}</strong><span>Generated summaries</span></div></section><section class="report-stack"><article class="card report-card scoreboard-card"><div class="report-heading"><div><p class="eyebrow">Spoon Madagascar scoreboard</p><h2>${leader ? `${esc(leader.group.name)} is leading` : "No scores yet"}</h2></div><span class="ai-badge">${madaProjectTotal} marks total</span></div><div class="scoreboard-list combined-scoreboard">${scoreRows.map((row, index) => `<div class="${index === 0 && row.average > 0 ? "leader" : ""}"><span>${index + 1}</span><strong>${esc(row.group.name)}</strong><small class="mada-office-badge">${esc(row.group.office)}</small><small>${row.juryCount} jury</small><meter min="0" max="${row.max || 1}" value="${row.average}"></meter><b>${row.average}/${row.max}</b></div>`).join("")}</div></article>${adminIndividualFeedbackView("madagascar")}${stakeholderPrivateDataAdminView("madagascar")}${stakeholderAccessAdminView("madagascar")}${aiUsageSummaryView("madagascar")}${madaDetailedGroupCardsView()}${newbieGroupsEditorView("madagascar")}${madaTopicAdminView()}${madaJuryAdminView()}${madaReviewEditorView()}</section></main>`);
 }
 
 function buildPersonFeedback(person) {
@@ -3960,7 +4369,7 @@ function adminDashboard(selectedMentor = "all") {
   lastAdminMentor = selectedMentor;
   const totalCorrections = Object.keys(state.groupCorrections).length;
   const totalRemarks = Object.values(state.individualRemarks).filter(Boolean).length;
-  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminIndividualFeedbackView("mauritius")}${stakeholderAccessAdminView("mauritius")}${aiUsageSummaryView("mauritius")}${adminDetailedGroupCardsView()}${mentorManagementView()}${newbieGroupsEditorView("mauritius")}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
+  shell(`<main class="page admin-page"><section class="hero"><div><p class="eyebrow">Admin command centre</p><h1>Scoreboard & feedback</h1></div><div class="hero-actions"><button class="secondary" data-action="admin-table">Full table view →</button><button class="secondary" data-action="mada-admin">Spoon Madagascar admin →</button><button class="primary" data-action="generate-reports">✦ Generate AI summaries</button></div></section><section class="stats"><div class="stat"><strong>${state.mentors.length}</strong><span>Spoon mentors</span></div><div class="stat"><strong>${totalCorrections}</strong><span>Marked questions</span></div><div class="stat"><strong>${knownTotalMarks() + miniProjectTotal}</strong><span>Combined total marks</span></div><div class="stat"><strong>${Object.keys(state.reports).length}</strong><span>Generated summaries</span></div></section><section class="report-stack">${scoreboardView()}${adminIndividualFeedbackView("mauritius")}${stakeholderPrivateDataAdminView("mauritius")}${stakeholderAccessAdminView("mauritius")}${aiUsageSummaryView("mauritius")}${adminDetailedGroupCardsView()}${mentorManagementView()}${newbieGroupsEditorView("mauritius")}${mentorAccessCodesView()}${miniProjectTopicAdminView()}${photoManagerView()}${juryAdminView()}${auditTrailView()}</section></main>`);
 }
 
 async function openPublicForm() {
@@ -4065,6 +4474,7 @@ document.addEventListener("submit", async event => {
     try {
       const ok = await unlockStakeholderFromAccessCode(eventKey, data.stakeholderCode);
       if (!ok) return stakeholderAccessView(eventKey, "This stakeholder code is not valid. Ask admin for the latest code.");
+      await fetchStakeholderPrivateData(eventKey);
       showToast(`Stakeholder dashboard unlocked for ${stakeholderEventLabel(eventKey)}`);
       stakeholderDashboard(eventKey);
     } catch (error) {
@@ -4165,6 +4575,20 @@ document.addEventListener("submit", async event => {
     } catch (error) {
       console.error("Admin individual feedback save failed", error);
       showToast(friendlyError(error, "Could not save individual feedback. Try again."));
+    }
+  }
+
+  if (event.target.id === "stakeholder-private-data-form") {
+    const data = Object.fromEntries(new FormData(event.target));
+    const eventKey = event.target.dataset.eventKey || "mauritius";
+    try {
+      await persistStakeholderPrivateDataAsAdmin(eventKey, data);
+      showToast(updatedOnlineMessage("Stakeholder sheet data"));
+      if (eventKey === "madagascar") madaAdminPage();
+      else adminDashboard(lastAdminMentor);
+    } catch (error) {
+      console.error("Stakeholder private data save failed", error);
+      showToast(friendlyError(error, "Could not save stakeholder sheet data. Try again."));
     }
   }
 
@@ -4429,6 +4853,20 @@ document.addEventListener("click", async event => {
     location.href = privateUrl;
     return;
   }
+  if (button.dataset.deletePrivateStakeholderData) {
+    const eventKey = button.dataset.deletePrivateStakeholderData;
+    const ok = confirm(`Permanently delete all ${stakeholderEventLabel(eventKey)} stakeholder sheet data? This removes interview comments and choices from Supabase.`);
+    if (!ok) return;
+
+    try {
+      await deleteStakeholderPrivateDataAsAdmin(eventKey);
+      showToast(`✓ ${stakeholderEventLabel(eventKey)} stakeholder sheet data deleted`);
+      eventKey === "madagascar" ? madaAdminPage() : adminDashboard(lastAdminMentor);
+    } catch (error) {
+      showToast(friendlyError(error, "Could not delete stakeholder sheet data."));
+    }
+    return;
+  }
   if (button.dataset.regenerateMentorCode) {
     const name = button.dataset.regenerateMentorCode;
     const ok = confirm(`Regenerate ${name}'s mentor access code? Their old code will stop being the shared current code.`);
@@ -4527,6 +4965,7 @@ document.addEventListener("click", async event => {
   if (button.dataset.action === "refresh-stakeholder") {
     clearStakeholderAISummaries(button.dataset.eventKey || "mauritius");
     await loadSharedData({ includeAdminData: false });
+    await fetchStakeholderPrivateData(button.dataset.eventKey || "mauritius");
     stakeholderDashboard(button.dataset.eventKey || "mauritius");
     showToast("✓ Stakeholder data refreshed");
     return;
@@ -4871,7 +5310,22 @@ document.addEventListener("click", async event => {
   }
 });
 
-document.addEventListener("change", event => {
+document.addEventListener("change", async event => {
+  if (event.target.matches("[data-stakeholder-csv-upload]")) {
+    const form = event.target.closest("#stakeholder-private-data-form");
+    const file = event.target.files?.[0];
+    if (!form || !file) return;
+    try {
+      const rows = parseCsv(await file.text());
+      const { matched, missing } = applyStakeholderCsvToForm(form, rows);
+      showToast(`CSV loaded: ${matched} newbie row${matched === 1 ? "" : "s"} matched. Click save to store it.`);
+      if (missing.length) console.warn("CSV rows not matched to newbies:", missing);
+    } catch (error) {
+      console.error("Stakeholder CSV import failed", error);
+      showToast("Could not read this CSV. Check the file columns and try again.");
+    }
+    return;
+  }
   if (event.target.closest("#mini-project-form")) {
     if (event.target.matches("[data-criteria-input]")) {
       sanitizeCriteriaInput(event.target);

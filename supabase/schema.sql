@@ -87,6 +87,20 @@ create table if not exists public.stakeholder_ai_summaries (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.stakeholder_private_data (
+  id uuid primary key default gen_random_uuid(),
+  event_key text not null check (event_key in ('mauritius', 'madagascar')),
+  group_id integer not null,
+  group_name text not null,
+  participant_name text not null,
+  stakeholder_choice text not null default '',
+  private_notes text not null default '',
+  sheet_data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (event_key, participant_name)
+);
+
 create table if not exists public.change_history (
   id bigint generated always as identity primary key,
   table_name text not null,
@@ -424,6 +438,41 @@ as $$
   );
 $$;
 
+create or replace function public.get_stakeholder_private_data(requested_event_key text, submitted_code text)
+returns table (
+  id uuid,
+  event_key text,
+  group_id integer,
+  group_name text,
+  participant_name text,
+  stakeholder_choice text,
+  private_notes text,
+  sheet_data jsonb,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    data.id,
+    data.event_key,
+    data.group_id,
+    data.group_name,
+    data.participant_name,
+    data.stakeholder_choice,
+    data.private_notes,
+    data.sheet_data,
+    data.created_at,
+    data.updated_at
+  from public.stakeholder_private_data data
+  where data.event_key = lower(trim(requested_event_key))
+    and public.verify_stakeholder_access_code(requested_event_key, submitted_code)
+  order by data.group_id asc, data.participant_name asc;
+$$;
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -477,6 +526,11 @@ for each row execute function public.set_updated_at();
 drop trigger if exists stakeholder_ai_summaries_updated_at on public.stakeholder_ai_summaries;
 create trigger stakeholder_ai_summaries_updated_at
 before update on public.stakeholder_ai_summaries
+for each row execute function public.set_updated_at();
+
+drop trigger if exists stakeholder_private_data_updated_at on public.stakeholder_private_data;
+create trigger stakeholder_private_data_updated_at
+before update on public.stakeholder_private_data
 for each row execute function public.set_updated_at();
 
 drop trigger if exists newbie_photos_updated_at on public.newbie_photos;
@@ -619,6 +673,7 @@ alter table public.admin_individual_feedback enable row level security;
 alter table public.ai_reports enable row level security;
 alter table public.ai_usage_events enable row level security;
 alter table public.stakeholder_ai_summaries enable row level security;
+alter table public.stakeholder_private_data enable row level security;
 alter table public.change_history enable row level security;
 alter table public.admin_users enable row level security;
 alter table public.mentors enable row level security;
@@ -650,6 +705,7 @@ grant usage on schema public to anon, authenticated;
 grant execute on function public.verify_mentor_access_code(text) to anon, authenticated;
 grant execute on function public.verify_jury_access_code(text) to anon, authenticated;
 grant execute on function public.verify_stakeholder_access_code(text, text) to anon, authenticated;
+grant execute on function public.get_stakeholder_private_data(text, text) to anon, authenticated;
 grant select on public.mentors to anon, authenticated;
 grant insert, update, delete on public.mentors to authenticated;
 grant select, insert, update, delete on public.mentor_access_codes to authenticated;
@@ -675,6 +731,9 @@ grant select on public.ai_usage_events to authenticated;
 grant insert on public.ai_usage_events to anon, authenticated;
 grant usage, select on sequence public.ai_usage_events_id_seq to anon, authenticated;
 grant select, insert, update on public.stakeholder_ai_summaries to anon, authenticated;
+revoke all on public.stakeholder_private_data from anon;
+revoke all on public.stakeholder_private_data from authenticated;
+grant select, insert, update, delete on public.stakeholder_private_data to authenticated;
 grant select, delete on public.change_history to authenticated;
 grant select on public.admin_users to authenticated;
 
@@ -989,6 +1048,13 @@ to anon, authenticated
 using (true)
 with check (true);
 
+drop policy if exists "admin manage stakeholder private data" on public.stakeholder_private_data;
+create policy "admin manage stakeholder private data"
+on public.stakeholder_private_data for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
 drop policy if exists "public read change history" on public.change_history;
 drop policy if exists "admin read change history" on public.change_history;
 create policy "admin read change history"
@@ -1037,6 +1103,12 @@ end $$;
 do $$
 begin
   alter publication supabase_realtime add table public.stakeholder_ai_summaries;
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.stakeholder_private_data;
 exception when duplicate_object then null;
 end $$;
 
